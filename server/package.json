@@ -16,5 +16,12 @@
   "bugs": {
     "url": "https://github.com/Zellev/appujianessay/issues"
   },
-  "homepage": "https://github.com/Zellev/appujianessay#readme"
+  "homepage": "https://github.com/Zellev/appujianessay#readme",
+  "dependencies": {
+    "express": "^4.17.1"
+  },
+  "devDependencies": {
+    "eslint": "^7.31.0",
+    "nodemon": "^2.0.12"
+  }
 }
