@@ -1,0 +1,20 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "server side script",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon src/app.js --exec \"npm run lint && node\"",
+    "lint": "eslint **/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/Zellev/appujianessay.git"
+  },
+  "author": "Azhar",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Zellev/appujianessay/issues"
+  },
+  "homepage": "https://github.com/Zellev/appujianessay#readme"
+}
