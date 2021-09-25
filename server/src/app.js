@@ -1,18 +1,23 @@
-const express = require('express')
-const bodyParser = require('body-parser')
-const cors = require('cors')
-const morgan = require('morgan')
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+const { sequelize } = require('./models');
+const passport = require('passport')
+const config = require('./config/dbconfig');
+const ErrorHandler = require('./errorhandlers/ErrorHandler');
 
-const app = express()
-app.use(morgan('combined'))
-app.use(bodyParser.json())
+const app = express();
+require('./config/passport')(passport);
+app.use(passport.initialize());
+app.use(morgan('combined'));// dev
+app.use(express.json({limit: '10mb', extended: true}));
+app.use(express.urlencoded({limit: '10mb', extended: false}));// true
 app.use(cors())
 
-const port = 8080
+require('./routes')(app);
+app.use(ErrorHandler);
 
-app.get('/status', (req, res) => {
-    res.send({message: 'Hello world!'
-    })
-})
-
-app.listen(port, () => console.log(`Example app listening on port ${port}!`))
+sequelize.sync({}).then(() => {// ({force: true})
+    app.listen(config.port);
+    console.log(`server running at port:${config.port}`);    
+});
