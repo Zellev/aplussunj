@@ -9,6 +9,7 @@ const ErrorHandler = require('./errorhandlers/ErrorHandler');
 const app = express();
 require('./config/passport')(passport);
 app.use(passport.initialize());
+app.use(express.static(__dirname));
 app.use(morgan('combined'));// dev
 app.use(express.json({limit: '10mb', extended: true}));
 app.use(express.urlencoded({limit: '10mb', extended: false}));// true
@@ -19,5 +20,5 @@ app.use(ErrorHandler);
 
 sequelize.sync({}).then(() => {// ({force: true})
     app.listen(config.port);
-    console.log(`server running at port:${config.port}`);    
+    console.log(`server running at port:${config.port}`);
 });

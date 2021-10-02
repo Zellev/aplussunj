@@ -12,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
         NIDN: { 
             type: DataTypes.STRING(30), 
             unique: true,
-            allowNull: false
+            allowNull: true
         },
         NIDK: { 
             type: DataTypes.STRING(30), 
@@ -32,7 +32,6 @@ module.exports = (sequelize, DataTypes) => {
         },
         created_at: { 
             type: DataTypes.DATE,
-            defaultValue: sequelize.fn('NOW'),
             allowNull: false
         },
         updated_at: { 
@@ -41,17 +40,15 @@ module.exports = (sequelize, DataTypes) => {
         }
     }, {
         freezeTableName: true,
-        timestamps: false,       
+        timestamps: false,
+        paranoid: true,
         indexes:[
             {
                 name: 'archived_by_createdAt',
                 unique: false,
                 fields:['created_at', 'updated_at']
             }
-        ],
-        getterMethods: {
-            
-        } 
+        ]
     });
 
     Dosen.associate = db => {

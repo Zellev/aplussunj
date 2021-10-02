@@ -1,29 +1,26 @@
 module.exports = (sequelize, DataTypes) => {
-    const Role = sequelize.define('Ref_role', {
-        kode_role: { 
+    const Lupa_pw = sequelize.define("Lupa_pw", {
+        kode_reset_pw: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
             primaryKey: true, 
             autoIncrement: true,
         },
-        role: { 
+        username: {
             type: DataTypes.STRING(50), 
-            unique: true,
             allowNull: false
-        }      
+        },
+        email: { 
+            type: DataTypes.STRING(100), 
+            allowNull: false
+        },
+        status: { 
+            type: DataTypes.ENUM('sudah', 'belum') 
+        }
     }, {
         freezeTableName: true,
         timestamps: false,
-        paranoid: true,       
     });
 
-    Role.associate = db => {
-        Role.hasOne(db.User, {
-            foreignKey: 'kode_role',
-            onDelete: 'RESTRICT'
-        });
-    }
-
-    return Role;
+    return Lupa_pw;
 }
-

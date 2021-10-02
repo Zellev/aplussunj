@@ -8,17 +8,16 @@ module.exports = (sequelize, DataTypes) => {
         },
         pertanyaan: { 
             type: DataTypes.STRING(100),
-            unique: true,
             allowNull: false
         },
         jawaban: {
-            type: DataTypes.STRING(100),
-            unique: true,
+            type: DataTypes.STRING(100),            
             allowNull: false
         }
     }, {
         freezeTableName: true,
-        timestamps: false
+        timestamps: false,
+        paranoid: true,
     });
 
     return Captcha;

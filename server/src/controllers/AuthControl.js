@@ -1,10 +1,10 @@
-const { Captcha } = require('../models');
+const { Captcha, User, Lupa_pw } = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const config = require('../config/dbconfig');
-const Passport = require('passport');
 const TIME = 60 * 60 * 24 * 7; // per-1 minggu, ganti angka paling blkng
+const { auther } = require('../helpers/global')
 
 function jwtSignuser (user) {   
   return jwt.sign(user, config.auth.secretKey, {
@@ -12,26 +12,27 @@ function jwtSignuser (user) {
   });
 }
 
+const getUser = async obj => {
+  return await User.findOne({
+      where: obj
+  });
+}
+
 module.exports = {
 
   async JwtauthAdmin(req, res, next) {   
-    req.user = new Promise((resolve, reject) => {
-      Passport.authenticate('jwt',{ session: false }, (err, user) => {
-          if (err) {
-            reject(new Error(err))
-          } else if (!user) { 
-            reject(createError.BadRequest('Not authenticated'))
-          }
-          resolve(user)
-        })(req, res, next)
-      })
-      const auth = await req.user
-      if (auth.kode_role === 1){
-        return next()
+    try {
+      const auth = await auther(req, res, next)
+      if (auth.kode_role === 1) {
+          req.user = auth
+          return next()
       } else {
-        return next(createError.Unauthorized('Bukan admin!'))
-      }      
-  },
+          return next(createError.Unauthorized('Bukan admin!'))
+      }
+    } catch (error) {
+        next(error)
+    }      
+  },  
 
   async captcha (req, res, next){
     try {
@@ -63,17 +64,37 @@ module.exports = {
                 username: userJson.username,
                 email: userJson.email,
                 // isAdmin: isAdmin,
-                token: 'Bearer ' + jwtSignuser(userJson),
+                token: jwtSignuser(userJson),// dengan string: Bearer
                 expiredIn: (TIME/86400) + ' Hari'
               });
           //     if (auth user == admin, dosen, mhs)
           // res.redirect('/')
         } else {
-          next(createError.BadRequest('password salah!'));
+          throw next(createError.BadRequest('password salah!'));
         }            
-    } catch (error) {
-      console.log(error)
-      // next(error);
+    } catch (error) {      
+      next(error);
     }
-  }
+  },
+
+  async lupapw(req, res, next){
+    try {      
+      const { email } = req.body;
+      const user = await getUser({email:email});
+      if(!user) {throw createError.Forbidden('user tidak ditemukan!');}
+      const data = await Lupa_pw.create({
+        username: user.username,
+        email: user.email,
+        status: 'belum'
+      })
+      res.status(200).json({
+        success: true,
+        msg: 'Permintaan telah terkirim', 
+        data: data
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+  
 }

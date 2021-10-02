@@ -26,17 +26,18 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         kode_role: { 
-            type: DataTypes.INTEGER(11).UNSIGNED
+            type: DataTypes.INTEGER(11).UNSIGNED,
+            allowNull: false,
         },
         foto_profil: { 
-            type: DataTypes.BLOB 
+            type: DataTypes.STRING(250)             
         },
         keterangan: { 
             type: DataTypes.TEXT 
         },
         created_at: { 
             type: DataTypes.DATE,
-            defaultValue: sequelize.fn('NOW'),            
+            allowNull: false           
          },
         updated_at: { 
             type: DataTypes.DATE,
@@ -44,6 +45,7 @@ module.exports = (sequelize, DataTypes) => {
          }
     }, {       
         timestamps: false,
+        paranoid: true,
         indexes:[
             {
                 name: 'archived_by_createdAt',

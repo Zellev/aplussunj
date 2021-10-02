@@ -28,7 +28,6 @@ module.exports = (sequelize, DataTypes) => {
         },
         created_at: { 
             type: DataTypes.DATE,
-            defaultValue: sequelize.fn('NOW'),
             allowNull: false
         },
         updated_at: { 
@@ -37,7 +36,8 @@ module.exports = (sequelize, DataTypes) => {
         }
     }, {
         freezeTableName: true,
-        timestamps: false,       
+        timestamps: false,
+        paranoid: true,
         indexes:[            
             {
                 name: 'archived_by_createdAt',
