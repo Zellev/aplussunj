@@ -11,13 +11,13 @@ const createError = require('../errorHandlers/ApiErrors');// buat 404
 module.exports = (app) => { //TODO: make main route with 1 auth control middleware and nested it!
 
     /*--RUTE ADMIN--*/
-    app.use('/admin', AuthControl.JwtauthAdmin, AdminRoute)
+    app.use('/admin/:id', AuthControl.JwtauthAdmin, AdminRoute)
 
     /*--RUTE DOSEN--*/
-    // app.use('/dosen', AuthControl.JwtauthAdmin, AdminRoute)
+    // app.use('/dosen', AuthControl.JwtauthDosen, DosenRoute)
 
     /*--RUTE MAHASISWA--*/
-    // app.use('/mahasiswa', AuthControl.JwtauthAdmin, AdminRoute)
+    // app.use('/mahasiswa', AuthControl.JwtauthMhs, MhsRoute)
 
     /*--RUTE ALL USER NOT LOGGED IN--*/
     app.get('/get-captcha', AuthControl.captcha);
@@ -25,9 +25,10 @@ module.exports = (app) => { //TODO: make main route with 1 auth control middlewa
     app.post('/lupa-pw', AuthControl.lupapw);
 
     /*--RUTE ALL USER LOGGEDIN--*/
-    app.get('/getMatakuliah/all', AlluserControl.JwtauthAll, AlluserControl.getmatkul);
-    app.patch('/user/:id/ubah-pw', AlluserControl.JwtauthAll, Validator.ubahpassword, AlluserControl.ubahpass);
-    app.post('/profil/avatar-upload', AlluserControl.JwtauthAll, uploadPic.single('foto_profil'), AlluserControl.postavatar);
+    app.get('/:id/getMatakuliah/all', AlluserControl.JwtauthAll, AlluserControl.getallMatkul);
+    app.get('/:id/getKelas/all', AlluserControl.JwtauthAll, AlluserControl.getallKelas);
+    app.patch('/:id/ubah-pw', AlluserControl.JwtauthAll, Validator.ubahpassword, AlluserControl.ubahPass);
+    app.post('/:id/avatar-upload', AlluserControl.JwtauthAll, uploadPic.single('foto_profil'), AlluserControl.postAvatar);
 
     /*--404--*/
     app.get('*',(req, res, next) => {next(createError.NotFound('404, resource tidak ditemukan...'))});

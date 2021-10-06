@@ -9,6 +9,11 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER(11).UNSIGNED,            
             allowNull: false
         },
+        NIP: { 
+            type: DataTypes.STRING(30), 
+            unique: true,
+            allowNull: false
+        },
         NIDN: { 
             type: DataTypes.STRING(30), 
             unique: true,

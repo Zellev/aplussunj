@@ -43,6 +43,9 @@ module.exports = (sequelize, DataTypes) => {
         }),
         Matkul.belongsTo(db.Ref_semester, {
             foreignKey: 'semester'
+        }),
+        Matkul.hasMany(db.Kelas, {
+            foreignKey: 'kode_matkul'
         })
     };
 

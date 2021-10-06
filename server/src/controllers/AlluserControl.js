@@ -1,6 +1,6 @@
 const bcrypt = require('bcrypt');
 const sequelize = require('sequelize')
-const { User, Matakuliah } = require('../models');
+const { User, Matakuliah, Kelas } = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
 const { auther, paginator } = require('../helpers/global')
 
@@ -25,7 +25,7 @@ module.exports = {
         }           
     },
 
-    async ubahpass(req, res, next) {
+    async ubahPass(req, res, next) {
         try {
             const {current_password, new_password, confirm_password} = req.body;
             const { id } = await req.params
@@ -44,7 +44,7 @@ module.exports = {
                     { 
                         where: { email: email }
                     })
-                return res.status(200).json({
+                res.status(200).json({
                     success: true,
                     msg: 'Password Berhasil Diubah!',
                     password_baru: new_password
@@ -61,7 +61,7 @@ module.exports = {
                
     },
 
-    async getmatkul(req, res, next) {
+    async getallMatkul(req, res, next) {
         try {
           const pages = parseInt(req.query.page);
           const limits = parseInt(req.query.limit);
@@ -85,9 +85,46 @@ module.exports = {
         }
     },
 
-    async postavatar(req, res, next) {
-        console.log('fileuploaded')
-        res.send(req.file)
-        // req.file.path -> save it to users.foto_profil
+    async getallKelas(req, res, next) {
+        try {
+          const pages = parseInt(req.query.page);
+          const limits = parseInt(req.query.limit);
+            let val = await paginator(Kelas, pages, limits);
+            let vals = [];
+            for(let dataValues of val.results) {// iterate over array from findall
+            let matkul = await Matakuliah.findOne({where:{kode_matkul:dataValues.kode_matkul}})
+                vals.push({// push only some wanted values, zellev
+                    kode_seksi: dataValues.kode_seksi,
+                    nama_matkul: matkul.nama_matkul,
+                    hari: dataValues.hari,
+                    jam: dataValues.jam
+                })
+            }
+            const matkul = await Promise.all(vals)
+            res.send({
+                next:val.next,
+                previous:val.previous,
+                matkul
+            })
+        } catch (error) {
+          next(error)
+        }
+    },
+
+    async postAvatar(req, res, next) {
+        try {
+            const file = req.file.filename
+            const { id } = req.params
+            let updateVal = { foto_profil: file, updated_at: sequelize.fn('NOW')};
+            await User.update(updateVal,{
+                where: { id: id }
+            })
+            res.status(200).json({
+                success: true,
+                msg: 'Foto berhasil diubah!'
+            })
+        } catch (error) {
+            next(error)
+        }
     },
 }
