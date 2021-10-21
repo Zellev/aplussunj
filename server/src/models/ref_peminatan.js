@@ -6,7 +6,7 @@ module.exports = (sequelize, DataTypes) => {
             autoIncrement: true
         },
         peminatan: { 
-            type: DataTypes.STRING(50),
+            type: DataTypes.STRING(100),
             allowNull: true,
             unique:true
         },
@@ -20,7 +20,8 @@ module.exports = (sequelize, DataTypes) => {
         Peminatan.hasMany(db.Matakuliah, {
             foreignKey: 'kode_peminatan',
             allowNull: true,
-            onDelete: 'CASCADE'
+            onDelete: 'CASCADE',
+            as: 'Matkul'
         })
     };
 

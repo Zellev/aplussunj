@@ -67,7 +67,8 @@ module.exports = (sequelize, DataTypes) => {
             onDelete: 'CASCADE'
         }),
         User.belongsTo(db.Ref_role, {
-            foreignKey: 'kode_role'
+            foreignKey: 'kode_role',
+            as: 'Role'
         })
     }
 

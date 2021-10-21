@@ -20,11 +20,13 @@ module.exports = (sequelize, DataTypes) => {
     Jenis_ujian.associate = db => {
         Jenis_ujian.hasMany(db.Paket_soal, {
             foreignKey: 'kode_jenis_ujian',
-            onDelete: 'CASCADE'
+            onDelete: 'CASCADE',
+            as: 'PaketSoal'
         }),
         Jenis_ujian.hasMany(db.Rel_kelas_paketsoal, {
             foreignKey: 'jenis_ujian',
-            onDelete: 'CASCADE'
+            onDelete: 'CASCADE',
+            as: 'UjianperKelas'
         })
     };
 

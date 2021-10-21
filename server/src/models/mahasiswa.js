@@ -49,7 +49,8 @@ module.exports = (sequelize, DataTypes) => {
 
     Mahasiswa.associate = db => {
         Mahasiswa.belongsTo(db.User, { 
-            foreignKey: 'id_user'
+            foreignKey: 'id_user',
+            as: 'User'
         });
     }
 

@@ -30,22 +30,26 @@ module.exports = (sequelize, DataTypes) => {
     }, {
         freezeTableName: true,
         timestamps: false,
-        paranoid: true,
+        paranoid: true
     });
 
     Matkul.associate = db => {        
         Matkul.belongsTo(db.Ref_kel_matkul, {
-            foreignKey: 'kode_kel_mk'
+            foreignKey: 'kode_kel_mk',
+            as: 'KelMk'
         }),
         Matkul.belongsTo(db.Ref_peminatan, {
             foreignKey: 'kode_peminatan',            
-            allowNull: true
+            allowNull: true,
+            as: 'RefPemin'
         }),
         Matkul.belongsTo(db.Ref_semester, {
-            foreignKey: 'semester'
+            foreignKey: 'semester',
+            as: 'RefSem'
         }),
         Matkul.hasMany(db.Kelas, {
-            foreignKey: 'kode_matkul'
+            foreignKey: 'kode_matkul',
+            as: 'Kelas'
         })
     };
 

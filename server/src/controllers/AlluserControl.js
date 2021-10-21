@@ -1,8 +1,9 @@
 const bcrypt = require('bcrypt');
 const sequelize = require('sequelize')
-const { User, Matakuliah, Kelas } = require('../models');
+const { User, Matakuliah, Kelas, Pengumuman, Ref_semester } = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
-const { auther, paginator } = require('../helpers/global')
+const { paginator } = require('../helpers/global');
+// const { Op } = require('sequelize');
 
 const getUser = async obj => {
     return await User.findOne({
@@ -12,76 +13,128 @@ const getUser = async obj => {
 
 module.exports = {
 
-    async JwtauthAll(req, res, next) {
-        try {
-            const auth = await auther(req, res, next) 
-            if (auth.kode_role){
-                return next()
-            } else {
-                return next(createError.Unauthorized('Bukan user!'))
-            }
-        } catch (error) {
-            next(error)
-        }           
-    },
-
     async ubahPass(req, res, next) {
-        try {
-            const {current_password, new_password, confirm_password} = req.body;
-            const { id } = await req.params
-            let user = await getUser({ id: id });
-            const { email } = user
-            let password = current_password;
-            const passwordUser = await bcrypt.compareSync(password, user.password)
-      
-            if (passwordUser) {
-              if(new_password == confirm_password){
-                const hashed = await bcrypt.hash(new_password, 10)
-                await User.update({ 
-                        password: hashed,
-                        updated_at: sequelize.fn('NOW')
-                    },
-                    { 
-                        where: { email: email }
-                    })
-                res.status(200).json({
-                    success: true,
-                    msg: 'Password Berhasil Diubah!',
-                    password_baru: new_password
-                })
-              }else {
-                throw createError.BadRequest('password tidak sama')
-              }
-            } else {
-              throw createError.BadRequest('password lama salah')
+      try {
+          const {current_password, new_password, confirm_password} = req.body;
+          const { id } = await req.params;
+          let user = await getUser({ id: id });
+          const { email } = user;
+          let password = current_password;
+          const passwordUser = await bcrypt.compareSync(password, user.password);
+    
+          if (passwordUser) {
+            if(new_password == confirm_password){
+              const hashed = await bcrypt.hash(new_password, 10)
+              await User.update({ 
+                      password: hashed,
+                      updated_at: sequelize.fn('NOW')
+                  }, { 
+                      where: { email: email }
+              });
+              res.status(200).json({
+                  success: true,
+                  msg: 'Password Berhasil Diubah!',
+                  password_baru: new_password
+              })
+            }else {
+              throw createError.BadRequest('password tidak sama')
             }
-        } catch(error) {
-            next(error)
+          } else {
+            throw createError.BadRequest('password lama salah')
+          }
+      } catch(error) {
+          next(error);
+      }               
+    },
+    
+    async postAvatar(req, res, next) {
+        try {
+            const file = req.file.filename;
+            const { id } = req.params;
+            let updateVal = { foto_profil: file, updated_at: sequelize.fn('NOW')};
+            await User.update(updateVal,{
+                where: { id: id }
+            });
+            res.status(200).json({
+                success: true,
+                msg: 'Foto berhasil diubah!'
+            });
+        } catch (error) {
+            next(error);
         }
-               
     },
 
-    async getallMatkul(req, res, next) {
-        try {
-          const pages = parseInt(req.query.page);
-          const limits = parseInt(req.query.limit);
-            let val = await paginator(Matakuliah, pages, limits);
-            let vals = [];
-            for(let dataValues of val.results) {// iterate over array from findall
-                vals.push({// push only some wanted values, zellev
-                    kode_matkul: dataValues.kode_matkul,
-                    nama_matkul: dataValues.nama_matkul,
-                    sks: dataValues.sks
-                })
+    async cariperSemester(req, res, next) {
+      try {
+        let { kode_semester } = req.params;
+        let vals = [], temp = [];
+        const pages = parseInt(req.query.page);
+        const limits = parseInt(req.query.limit);
+        let opt = {
+          where: { kode_semester: kode_semester },
+          include: {
+            model: Matakuliah, as: 'Matkul',
+            offset: (pages - 1) * limits,
+            limit: limits,
+            include: { 
+              model: Kelas, as: 'Kelas',
+              attributes: ['kode_seksi', 'kode_matkul', 'hari', 'jam']              
             }
-            const matkul = await Promise.all(vals)
-            res.send({
-                next:val.next,
-                previous:val.previous,
-                matkul
+          }
+        }
+        const sms = await paginator(Ref_semester, pages, limits, opt)
+        for (let i of sms.results[0].Matkul){          
+          temp.push(i.Kelas)
+        }
+        for (let j of temp.flat()){
+          let matkul = await j.getMatkul()
+          vals.push({
+            kode_seksi: j.kode_seksi,
+            matkul: matkul.nama_matkul,
+            hari: j.hari,
+            jam: j.jam
+          })
+        }
+        
+        if (vals.length === 0) {vals.push('No Record...')}
+        res.send({
+          next: sms.next,
+          previous: sms.previous,
+          vals
+        })
+      } catch (error) {
+        next(error)
+      }
+    },
+
+    async getKelas(req, res, next) {
+        try {
+          const { kode_seksi } = req.params;
+          const val = await Kelas.findByPk(kode_seksi);
+          let temp = [];
+          if (!val) { throw createError.BadRequest('kelas tidak terdaftar!')}          
+          const matkul = await val.getMatkul({where:{kode_matkul:val.kode_matkul}});
+          const dosen = await val.getDosens()
+          for (let i of dosen){
+            temp.push({
+              kode_dosen: i.kode_dosen,
+              NIP: i.NIP,
+              NIDN: i.NIDN,
+              NIDK: i.NIDK,
+              nama_lengkap: i.nama_lengkap
             })
+          }
+          const kelas = {
+            kode_seksi: val.kode_seksi,
+            nama_matkul: matkul.nama_matkul,
+            hari: val.hari,
+            jam: val.jam,
+            desktripsi: val.deskripsi,
+            dosen_pengampu: temp
+          };
+          res.send(kelas);
         } catch (error) {
-          next(error)
+          next(error);
         }
     },
 
@@ -91,40 +144,39 @@ module.exports = {
           const limits = parseInt(req.query.limit);
             let val = await paginator(Kelas, pages, limits);
             let vals = [];
-            for(let dataValues of val.results) {// iterate over array from findall
-            let matkul = await Matakuliah.findOne({where:{kode_matkul:dataValues.kode_matkul}})
-                vals.push({// push only some wanted values, zellev
-                    kode_seksi: dataValues.kode_seksi,
-                    nama_matkul: matkul.nama_matkul,
-                    hari: dataValues.hari,
-                    jam: dataValues.jam
-                })
+            for(let i of val.results) {
+            let matkul = await i.getMatkul()
+            let dosen = await i.getDosens({
+              attributes: ['kode_dosen', 'NIDN', 'NIDK', 'nama_lengkap'],
+              joinTableAttributes: [] // Remove join table attribute!
+            })
+              vals.push({
+                  kode_seksi: i.kode_seksi,
+                  nama_matkul: matkul.nama_matkul,
+                  hari: i.hari,
+                  jam: i.jam,
+                  dosen_pengampu: dosen
+              })
             }
-            const matkul = await Promise.all(vals)
+            const kelas = await Promise.all(vals);
             res.send({
                 next:val.next,
                 previous:val.previous,
-                matkul
-            })
+                kelas: kelas
+            });
         } catch (error) {
-          next(error)
+          next(error);
         }
     },
 
-    async postAvatar(req, res, next) {
+    async getPengumumn(req, res, next) {
         try {
-            const file = req.file.filename
-            const { id } = req.params
-            let updateVal = { foto_profil: file, updated_at: sequelize.fn('NOW')};
-            await User.update(updateVal,{
-                where: { id: id }
-            })
-            res.status(200).json({
-                success: true,
-                msg: 'Foto berhasil diubah!'
-            })
-        } catch (error) {
-            next(error)
-        }
+            const getPengumuman = await Pengumuman.findAll({
+              where: {status : 'tampil'}
+            });        
+            res.send(getPengumuman);
+          } catch (error) {
+            next(error);
+          }
     },
 }

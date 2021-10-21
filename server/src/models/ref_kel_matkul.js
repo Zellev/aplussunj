@@ -21,7 +21,8 @@ module.exports = (sequelize, DataTypes) => {
     Kel_matkul.associate = db => {
         Kel_matkul.hasMany(db.Matakuliah, {
             foreignKey: 'kode_kel_mk',
-            onDelete: 'CASCADE'
+            onDelete: 'CASCADE',
+            as: 'Matkul'
         })
     };
 

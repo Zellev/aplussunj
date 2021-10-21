@@ -20,7 +20,8 @@ module.exports = (sequelize, DataTypes) => {
     Semester.associate = db => {
         Semester.hasMany(db.Matakuliah, {
             foreignKey: 'semester',
-            onDelete: 'CASCADE'
+            onDelete: 'CASCADE',
+            as: 'Matkul'
         })
     };
 

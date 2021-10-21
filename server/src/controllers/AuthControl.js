@@ -20,7 +20,20 @@ const getUser = async obj => {
 
 module.exports = {
 
-  async JwtauthAdmin(req, res, next) {   
+  async jwtauthAll(req, res, next) {
+    try {
+        const auth = await auther(req, res, next);
+        if (auth.kode_role){
+            return next()
+        } else {
+            return next(createError.Unauthorized('Bukan user!'))
+        }
+    } catch (error) {
+        next(error);
+    }
+  },
+
+  async jwtauthAdmin(req, res, next) {   
     try {
       const auth = await auther(req, res, next)
       if (auth.kode_role === 1) {

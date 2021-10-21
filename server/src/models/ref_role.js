@@ -20,7 +20,8 @@ module.exports = (sequelize, DataTypes) => {
     Role.associate = db => {
         Role.hasOne(db.User, {
             foreignKey: 'kode_role',
-            onDelete: 'RESTRICT'
+            onDelete: 'RESTRICT',
+            as: 'User'
         });
     }
 

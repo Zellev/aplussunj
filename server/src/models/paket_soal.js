@@ -29,6 +29,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false
         },
+        status: {
+            type: DataTypes.ENUM('terbit','draft'),            
+            allowNull: false
+        },
         deskripsi: {
             type: DataTypes.TEXT
         },
@@ -55,12 +59,17 @@ module.exports = (sequelize, DataTypes) => {
 
     Paket_soal.associate = db => {        
         Paket_soal.belongsTo(db.Ref_jenis_ujian, {
-            foreignKey: 'kode_jenis_ujian'
+            foreignKey: 'kode_jenis_ujian',
+            as: 'RefJenis'
         }),
         Paket_soal.belongsToMany(db.Kelas, {
             through: 'Rel_kelas_paketsoal',
             foreignKey: 'kode_paket',
-            as: 'kelas'
+            as: 'Kelases'
+        }),
+        Paket_soal.hasMany(db.Rel_kelas_paketsoal, {
+            foreignKey: 'kode_paket',
+            as: 'PaketOccurance'
         })
     };
 

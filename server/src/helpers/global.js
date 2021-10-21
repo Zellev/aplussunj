@@ -2,7 +2,7 @@ const createError = require('../errorHandlers/ApiErrors')
 const Passport = require('passport');
 
 module.exports = {
-    async paginator(model, pages, limits) {       
+    async paginator(model, pages, limits, options) {       
         const page = pages
         const limit = limits
         const startIndex = (page - 1) * limit
@@ -22,20 +22,24 @@ module.exports = {
                 limit: limit
             }
         }
-        results.results = await model.findAll({
+        if(options){
+            results.results = await model.findAll(options)
+        } else {
+            results.results = await model.findAll({
                 offset:startIndex,
                 limit:limit
             })
+        }        
         return results
     },
-
+  
     async auther(req, res ,next) {       
         return new Promise((resolve, reject) => {           
             Passport.authenticate('jwt',{ session: false }, (err, user) => {
                 if (err) {
                   reject(new Error(err))
-                } else if (!user) { 
-                  reject(createError.BadRequest('Server error!'))
+                } else if (!user) {
+                  reject(createError.Unauthorized('Server error!'))
                 }
                 resolve(user)
               })(req, res, next);

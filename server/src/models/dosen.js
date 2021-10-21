@@ -58,8 +58,14 @@ module.exports = (sequelize, DataTypes) => {
 
     Dosen.associate = db => {
         Dosen.belongsTo(db.User, { 
-            foreignKey: 'id_user'            
-        });
+            foreignKey: 'id_user',
+            as: 'User' 
+        }),
+        Dosen.belongsToMany(db.Kelas, {
+            through: 'Rel_dosen_kelas',
+            foreignKey: 'kode_dosen',
+            as: 'Kelases'
+        })
     }
 
     return Dosen;

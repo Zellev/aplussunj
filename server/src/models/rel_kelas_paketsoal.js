@@ -24,8 +24,19 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     Rel_Kelas_PaketSoal.associate = db => {
+        Rel_Kelas_PaketSoal.belongsTo(db.Kelas, {
+            foreignKey: 'kode_seksi',
+            onDelete: 'NO ACTION',
+            as: 'Kosek'
+        }),
+        Rel_Kelas_PaketSoal.belongsTo(db.Paket_soal, {
+            foreignKey: 'kode_paket',
+            onDelete: 'NO ACTION',
+            as: 'PaketSoal'
+        })
         Rel_Kelas_PaketSoal.belongsTo(db.Ref_jenis_ujian, {
-            foreignKey: 'jenis_ujian'
+            foreignKey: 'jenis_ujian',
+            as: 'JenisUjian'
         })
     };
 
