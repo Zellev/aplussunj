@@ -1,9 +1,9 @@
 const bcrypt = require('bcrypt');
 const sequelize = require('sequelize')
-const { User, Matakuliah, Kelas, Pengumuman, Ref_semester } = require('../models');
+const { User, Dosen, Matakuliah, Kelas, Pengumuman, Ref_semester } = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
 const { paginator } = require('../helpers/global');
-// const { Op } = require('sequelize');
+const { Op } = require('sequelize');
 
 const getUser = async obj => {
     return await User.findOne({
@@ -138,6 +138,57 @@ module.exports = {
         }
     },
 
+    async cariKelas(req, res, next) {
+      try {
+        let { find } = req.query;
+        find = find.toLowerCase();
+        let params = {
+          kelas: [],
+          temp: []
+        };
+        const pages = parseInt(req.query.page);
+        const limits = parseInt(req.query.limit);
+        let opt = {
+          order: [['kode_seksi', 'ASC']],
+          attributes: ['kode_seksi', 'hari', 'jam'],
+          where: {
+            [Op.or]: [
+              {kode_seksi: {[Op.like]:'%' + find + '%'}},
+              {'$Matkul.nama_matkul$': {[Op.like]:'%' + find + '%'}},
+              {'$Dosens.nama_lengkap$': {[Op.like]:'%' + find + '%'}} 
+            ]
+          },
+          offset: (pages - 1) * limits,
+          limit: limits, // m-m array search not working with limit on
+          subQuery: false, // nested  m-m + limit search only works with this on; bc of subquery querying?/not on top level.
+          include: [
+            { model: Matakuliah, as: 'Matkul', required: true,
+              attributes: ['nama_matkul'] },
+            { model: Dosen, as: 'Dosens', required: true,
+              attributes: ['nama_lengkap'], through: {attributes:[]} }
+          ]
+        }
+        params.kelas = await paginator(Kelas, pages, limits, opt);
+        if (params.kelas.results.length === 0) {params.temp.push('No record...')}   
+        for (let i of params.kelas.results){          
+          params.temp.push({
+            kode_seksi: i.kode_seksi,
+            nama_matkul: i.Matkul.nama_matkul,
+            hari: i.hari,
+            jam: i.jam,
+            dosen_pengampu: i.Dosens
+          })
+        }
+        res.send({
+          next: params.kelas.next,
+          previous: params.kelas.previous,
+          kelas: params.temp
+        })
+      } catch (error) {
+        next(error)
+      }
+    },
+
     async getallKelas(req, res, next) {
         try {
           const pages = parseInt(req.query.page);
@@ -147,7 +198,7 @@ module.exports = {
             for(let i of val.results) {
             let matkul = await i.getMatkul()
             let dosen = await i.getDosens({
-              attributes: ['kode_dosen', 'NIDN', 'NIDK', 'nama_lengkap'],
+              attributes: ['nama_lengkap'],
               joinTableAttributes: [] // Remove join table attribute!
             })
               vals.push({

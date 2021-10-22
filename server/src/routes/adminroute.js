@@ -7,7 +7,7 @@ let router = express.Router({mergeParams:true});
     router.get('/', AdminControl.getDashboard);
     //User operation
     router.get('/user', AdminControl.getallUser);
-    router.get('/user/:id_user', AdminControl.getUser);// ubah user, delete user
+    router.get('/user/:id_user', AdminControl.getUser);
     router.put('/user/ubah/:id_user', AdminControl.ubahUser);
     router.put('/user/ubah-bulk', uploadExcel.single('fileupdate'), AdminControl.ubahUserbulk);
     router.delete('/user/hapus/:id_user', AdminControl.hapusUser);

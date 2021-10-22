@@ -253,7 +253,7 @@ module.exports = {
   async getProfil(req, res, next) {
     try {
       const { id } = req.params;
-      // if (id != req.user.id) { throw createError.Unauthorized('') }
+      if (id != req.user.id) { throw createError.Unauthorized('access violation!') }
       const admin = await getUser({id:id});
       res.send(admin)
     } catch (error) {
@@ -422,6 +422,7 @@ module.exports = {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {
+        order: [['kode_dosen', 'ASC']],
         attributes: ['kode_dosen', 'NIDN', 'NIDK', 'nama_lengkap'],
         where: {
           [Op.or]: [
@@ -626,6 +627,7 @@ module.exports = {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {
+        order: [['kode_mhs', 'ASC']],
         attributes: ['kode_mhs', 'NIM', 'nama_lengkap'],
         where: {
           [Op.or]: [
@@ -823,9 +825,11 @@ module.exports = {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {
+        order: [['kode_matkul', 'ASC']],
         attributes: ['kode_matkul', 'nama_matkul', 'sks'],
         where: {
           [Op.or]: [
+            sequelize.where(sequelize.fn('lower', sequelize.col('kode_matkul')), 'LIKE', '%' + find + '%'),
             sequelize.where(sequelize.fn('lower', sequelize.col('nama_matkul')), 'LIKE', '%' + find + '%'),
             sequelize.where(sequelize.fn('lower', sequelize.col('sks')), 'LIKE', '%' + find + '%'),
           ] 

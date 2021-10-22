@@ -24,6 +24,7 @@ module.exports = {
     try {
         const auth = await auther(req, res, next);
         if (auth.kode_role){
+            req.user = auth
             return next()
         } else {
             return next(createError.Unauthorized('Bukan user!'))
@@ -45,7 +46,7 @@ module.exports = {
     } catch (error) {
         next(error)
     }      
-  },  
+  },
 
   async captcha (req, res, next){
     try {
