@@ -142,10 +142,7 @@ module.exports = {
       try {
         let { find } = req.query;
         find = find.toLowerCase();
-        let params = {
-          kelas: [],
-          temp: []
-        };
+        let kelas = [], temp = [];
         const pages = parseInt(req.query.page);
         const limits = parseInt(req.query.limit);
         let opt = {
@@ -164,14 +161,14 @@ module.exports = {
           include: [
             { model: Matakuliah, as: 'Matkul', required: true,
               attributes: ['nama_matkul'] },
-            { model: Dosen, as: 'Dosens', required: true,
+            { model: Dosen, as: 'Dosens',
               attributes: ['nama_lengkap'], through: {attributes:[]} }
           ]
         }
-        params.kelas = await paginator(Kelas, pages, limits, opt);
-        if (params.kelas.results.length === 0) {params.temp.push('No record...')}   
-        for (let i of params.kelas.results){          
-          params.temp.push({
+        kelas = await paginator(Kelas, pages, limits, opt);
+        if (kelas.results.length === 0) {temp.push('No record...')}   
+        for (let i of kelas.results){          
+          temp.push({
             kode_seksi: i.kode_seksi,
             nama_matkul: i.Matkul.nama_matkul,
             hari: i.hari,
@@ -180,9 +177,9 @@ module.exports = {
           })
         }
         res.send({
-          next: params.kelas.next,
-          previous: params.kelas.previous,
-          kelas: params.temp
+          next: kelas.next,
+          previous: kelas.previous,
+          kelas: temp
         })
       } catch (error) {
         next(error)

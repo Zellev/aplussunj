@@ -5,8 +5,10 @@ const express = require('express');
 let router = express.Router({mergeParams:true});
 
     router.get('/', AdminControl.getDashboard);
+    router.get('/status/pdf', AdminControl.printStatusPdf);
     //User operation
     router.get('/user', AdminControl.getallUser);
+    router.get('/user/cari', AdminControl.cariUser);
     router.get('/user/:id_user', AdminControl.getUser);
     router.put('/user/ubah/:id_user', AdminControl.ubahUser);
     router.put('/user/ubah-bulk', uploadExcel.single('fileupdate'), AdminControl.ubahUserbulk);

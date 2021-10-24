@@ -1,7 +1,7 @@
 const { User, Dosen, Mahasiswa,
   Captcha, Lupa_pw, Matakuliah,
   Ref_kel_matkul, Ref_peminatan,
-  Ref_semester, Kelas,
+  Ref_semester, Ref_role, Kelas,
   Pengumuman, Paket_soal,
   Rel_dosen_kelas } = require('../models');
 const bcrypt = require('bcrypt');
@@ -10,7 +10,7 @@ const config = require('../config/dbconfig');
 const sequelize = require('sequelize');
 const path = require('path');
 const readXlsxFile = require('read-excel-file/node');
-const { paginator } = require('../helpers/global');
+const { paginator, pdfCreatestatus } = require('../helpers/global');
 const createError = require('../errorHandlers/ApiErrors');
 const { Op } = require('sequelize');
 
@@ -45,6 +45,27 @@ const hashed = async () => {
 }// hash default password, ada di .env
 module.exports = {
   /* Dashboard */
+  async getStatus(){
+    const users = await User.count();
+      const userAdmin = await User.count({
+        where: {kode_role: '1'}
+      });
+      const userDosen = await User.count({
+        where: {kode_role: '2'}
+      });
+      const userMahasiswa = await User.count({
+        where: {kode_role: '3'}
+      });
+      const paketSoal = await Paket_soal.count();
+      return {
+        total_users: users,
+        jumlah_admin: userAdmin,
+        jumlah_dosen: userDosen,
+        jumlah_mhs: userMahasiswa,
+        total_paketSoal: paketSoal
+      }
+  },
+
   async getDashboard(req, res, next) {
     try {
       /*
@@ -57,27 +78,36 @@ module.exports = {
           5.  Number of paket soal created per day
           6.  Number of ujian started and/or completed per day
       */
-      // const sessioned = express.session
-      const users = await User.count();
-      const userAdmin = await User.count({
-        where: {kode_role: '1'}
-      });
-      const userDosen = await User.count({
-        where: {kode_role: '2'}
-      });
-      const userMahasiswa = await User.count({
-        where: {kode_role: '3'}
-      });
-      const paketSoal = await Paket_soal.count();
-      res.send({
-        total_users: users,
-        jumlah_admin: userAdmin,
-        jumlah_dosen: userDosen,
-        jumlah_mhs: userMahasiswa,
-        total_paketSoal: paketSoal
-      })
+      // const sessioned = express.session       
+      res.send(await module.exports.getStatus())
     } catch (error) {
       next(error);
+    }
+  },
+
+  async printStatusPdf(req, res, next) {
+    try {
+      const obj = await module.exports.getStatus()
+      let col = [], rows = [], data;
+      data = [obj]
+      Object.keys(obj).forEach((key)=>{
+        col.push(key)
+      });      
+      const column = [
+        {text: col[0],style: 'tableHeader'}, {text: col[1],style: 'tableHeader'}, 
+        {text: col[2],style: 'tableHeader'}, {text: col[3],style: 'tableHeader'}, 
+        {text: col[4],style: 'tableHeader'}
+      ]
+      for(let i of data){
+        rows.push(
+          {text: i.total_users,alignment: 'center'}, {text: i.jumlah_admin,alignment: 'center'}, 
+          {text: i.jumlah_dosen,alignment: 'center'}, {text: i.jumlah_mhs,alignment: 'center'},
+          {text: i.total_paketSoal,alignment: 'center'}
+        );
+      }
+      pdfCreatestatus(data, column, rows, res)
+    } catch (error) {
+      next(error)
     }
   },
   /* User operation */
@@ -105,6 +135,53 @@ module.exports = {
         })
     } catch (error) {
       next(error);
+    }
+  },
+
+  async cariUser(req, res, next) {
+    try {
+      let { find } = req.query;
+      find = find.toLowerCase();
+      let user = [], temp = [];
+      const pages = parseInt(req.query.page);
+      const limits = parseInt(req.query.limit);
+      let opt = {
+        order: [['id', 'ASC']],
+        attributes: ['id', 'username', 'email', 'status_civitas'],
+        where: {
+          [Op.or]: [
+            {id: {[Op.like]:'%' + find + '%'}},
+            {username: {[Op.like]:'%' + find + '%'}},
+            {email: {[Op.like]:'%' + find + '%'}},
+            {status_civitas: {[Op.like]:'%' + find + '%'}},
+            {'$Role.role$': {[Op.like]:'%' + find + '%'}}
+          ]
+        },
+        offset: (pages - 1) * limits,
+        limit: limits,
+        include: {
+          model: Ref_role, as: 'Role', required: true,
+          attributes: ['role']
+        }
+      }
+      user = await paginator(User, pages, limits, opt);
+      if (user.results.length === 0) {temp.push('No Record...')}
+      for (let i of user.results){          
+        temp.push({
+          id: i.id,
+          username: i.username,
+          email: i.email,
+          status_civitas: i.status_civitas,
+          role: i.Role.role
+        })
+      }
+      res.send({
+        next: user.next,
+        previous: user.previous,
+        user: temp
+      })
+    } catch (error) {
+      next(error)
     }
   },
 
@@ -415,10 +492,7 @@ module.exports = {
     try {
       let { find } = req.query;
       find = find.toLowerCase();
-      let params = {
-        dosen: [],
-        val: null
-      };
+      let dosen = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {
@@ -426,20 +500,20 @@ module.exports = {
         attributes: ['kode_dosen', 'NIDN', 'NIDK', 'nama_lengkap'],
         where: {
           [Op.or]: [
-            sequelize.where(sequelize.fn('lower', sequelize.col('nama_lengkap')), 'LIKE', '%' + find + '%'),
-            sequelize.where(sequelize.fn('lower', sequelize.col('NIDN')), 'LIKE', '%' + find + '%'),
-            sequelize.where(sequelize.fn('lower', sequelize.col('NIDK')), 'LIKE', '%' + find + '%')
+            {nama_lengkap: {[Op.like]:'%' + find + '%'}},
+            {NIDN: {[Op.like]:'%' + find + '%'}},
+            {NIDK: {[Op.like]:'%' + find + '%'}}
           ] 
         },
         offset: (pages - 1) * limits,
         limit: limits
       }
-      params.dosen = await paginator(Dosen, pages, limits, opt);
-      if (params.dosen.results.length === 0) {params.dosen.results.push('No Record...')}
+      dosen = await paginator(Dosen, pages, limits, opt);
+      if (dosen.results.length === 0) {dosen.results.push('No Record...')}
       res.send({
-        next: params.dosen.next,
-        previous: params.dosen.previous,
-        dosen: params.dosen.results
+        next: dosen.next,
+        previous: dosen.previous,
+        dosen: dosen.results
       })
     } catch (error) {
       next(error)
@@ -620,10 +694,7 @@ module.exports = {
     try {
       let { find } = req.query;
       find = find.toLowerCase();
-      let params = {
-        mhs: [],
-        val: null
-      };
+      let mhs = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {
@@ -631,19 +702,19 @@ module.exports = {
         attributes: ['kode_mhs', 'NIM', 'nama_lengkap'],
         where: {
           [Op.or]: [
-            sequelize.where(sequelize.fn('lower', sequelize.col('nama_lengkap')), 'LIKE', '%' + find + '%'),
-            sequelize.where(sequelize.fn('lower', sequelize.col('NIM')), 'LIKE', '%' + find + '%')
+            {nama_lengkap: {[Op.like]:'%' + find + '%'}},
+            {NIM: {[Op.like]:'%' + find + '%'}}
           ] 
         },
         offset: (pages - 1) * limits,
         limit: limits
       }
-      params.dosen = await paginator(Mahasiswa, pages, limits, opt);
-      if (params.mhs.results.length === 0) {params.mhs.results.push('No Record...')}
+      mhs = await paginator(Mahasiswa, pages, limits, opt);
+      if (mhs.results.length === 0) {mhs.results.push('No Record...')}
       res.send({
-        next: params.mhs.next,
-        previous: params.mhs.previous,
-        mhs: params.mhs.results
+        next: mhs.next,
+        previous: mhs.previous,
+        mhs: mhs.results
       })
     } catch (error) {
       next(error)
@@ -796,11 +867,15 @@ module.exports = {
       const limits = parseInt(req.query.limit);
         let val = await paginator(Matakuliah, pages, limits);
         let vals = [];
-        for(let dataValues of val.results) {// iterate over array from findall
-            vals.push({// push only some wanted values, zellev
-                kode_matkul: dataValues.kode_matkul,
-                nama_matkul: dataValues.nama_matkul,
-                sks: dataValues.sks
+        for(let i of val.results) {
+          let smstr = await i.getRefSem({
+            attributes: ['semester']
+          })
+            vals.push({
+                kode_matkul: i.kode_matkul,
+                nama_matkul: i.nama_matkul,
+                sks: i.sks,
+                semester: smstr.semester
             })
         }
         const matkul = await Promise.all(vals)
@@ -818,10 +893,7 @@ module.exports = {
     try {
       let { find } = req.query;
       find = find.toLowerCase();
-      let params = {
-        matkul: [],
-        val: null
-      };
+      let matkul = [], temp = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {
@@ -829,20 +901,32 @@ module.exports = {
         attributes: ['kode_matkul', 'nama_matkul', 'sks'],
         where: {
           [Op.or]: [
-            sequelize.where(sequelize.fn('lower', sequelize.col('kode_matkul')), 'LIKE', '%' + find + '%'),
-            sequelize.where(sequelize.fn('lower', sequelize.col('nama_matkul')), 'LIKE', '%' + find + '%'),
-            sequelize.where(sequelize.fn('lower', sequelize.col('sks')), 'LIKE', '%' + find + '%'),
-          ] 
+            {kode_matkul: {[Op.like]:'%' + find + '%'}},
+            {nama_matkul: {[Op.like]:'%' + find + '%'}},
+            {'$RefSem.semester$': {[Op.like]:'%' + find + '%'}}
+          ]
         },
         offset: (pages - 1) * limits,
-        limit: limits
+        limit: limits,
+        include: {
+          model: Ref_semester, as: 'RefSem', required: true,
+          attributes: ['semester']
+        }
       }
-      params.matkul = await paginator(Matakuliah, pages, limits, opt);
-      if (params.matkul.results.length === 0) {params.matkul.results.push('No Record...')}
+      matkul = await paginator(Matakuliah, pages, limits, opt);
+      if (matkul.results.length === 0) {temp.push('No Record...')}
+      for (let i of matkul.results){          
+          temp.push({
+            kode_matkul: i.kode_seksi,
+            nama_matkul: i.nama_matkul,
+            sks: i.sks,
+            semester: i.RefSem.semester
+          })
+        }
       res.send({
-        next: params.matkul.next,
-        previous: params.matkul.previous,
-        matkul: params.matkul.results
+        next: matkul.next,
+        previous: matkul.previous,
+        matkul: temp
       })
     } catch (error) {
       next(error)
