@@ -27,7 +27,7 @@ module.exports = {
             req.user = auth
             return next()
         } else {
-            return next(createError.Unauthorized('Bukan user!'))
+           throw createError.Unauthorized('Bukan user!')
         }
     } catch (error) {
         next(error);
@@ -41,7 +41,35 @@ module.exports = {
           req.user = auth
           return next()
       } else {
-          return next(createError.Unauthorized('Bukan admin!'))
+          throw createError.Unauthorized('Bukan admin!')
+      }
+    } catch (error) {
+        next(error)
+    }      
+  },
+
+  async jwtauthDosen(req, res, next) {   
+    try {
+      const auth = await auther(req, res, next)
+      if (auth.kode_role === 1 || auth.kode_role === 2) {
+          req.user = auth
+          return next()
+      } else {
+          throw createError.Unauthorized('Bukan dosen atau admin!')
+      }
+    } catch (error) {
+        next(error)
+    }      
+  },
+
+  async jwtauthMhs(req, res, next) {   
+    try {
+      const auth = await auther(req, res, next)
+      if (auth.kode_role === 1 || auth.kode_role === 3) {
+          req.user = auth
+          return next()
+      } else {
+          throw createError.Unauthorized('Bukan mahasiswa atau admin!')
       }
     } catch (error) {
         next(error)
@@ -67,9 +95,7 @@ module.exports = {
         const { password } = req.body;
         const passwordUser = await bcrypt.compareSync(password, user.password);
         const userJson = user.toJSON();
-
-        // const isAdmin =  userJson.kode_role === 1 ? true : false;
-        
+        // const isAdmin =  userJson.kode_role === 1 ? true : false;        
         if (passwordUser) {
               res.status(200).json({
                 success: true,

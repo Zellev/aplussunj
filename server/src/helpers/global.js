@@ -59,11 +59,21 @@ module.exports = {
         return dateTime
     },
 
-    pdfCreatestatus(data, col, row, res) {
+    createKode(length) {
+        let result = '';
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let charactersLength = characters.length;
+        for ( var i = 0; i < length; i++ ) {
+          result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        }
+      return result;
+    },
+
+    pdfCreatestatus(col, row, res) {
         const img = 'data:image/png;base64,' + require('fs')
                     .readFileSync(path.resolve(__dirname,'../../public/pdftemplate','kop_surat.png'))
                     .toString('base64')
-        let i, len, item, rows;        
+        let rows;        
         var imge = {            
             image: img,
             height: 130,
@@ -112,13 +122,8 @@ module.exports = {
               }
         };
         rows = dataTable.table.body;
-        i = 0;
-        len = data.length;
-
-        while (i < len) {
-        item = data[i];
-            rows.push(row);
-            i++;
+        for(let i of row){
+            rows.push(i)
         }
         var dd = {
             content: [],

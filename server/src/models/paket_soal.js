@@ -1,7 +1,7 @@
-module.exports = (sequelize, DataTypes) => {
+module.exports = (sequelize, DataTypes) => { //TODO DIS
     const Paket_soal = sequelize.define('Paket_soal', {
         kode_paket: { 
-            type: DataTypes.INTEGER(20).UNSIGNED,
+            type: DataTypes.STRING(11),
             allowNull: false,
             primaryKey: true
         },

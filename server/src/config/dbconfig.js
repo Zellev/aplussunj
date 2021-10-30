@@ -11,6 +11,10 @@ module.exports = {
             host: process.env.DB_HOST,
             timestamps: false,
             logging: false,
+            // dialectOptions: { not supported for mysql dialect :(
+            //     useUTC: false
+            // },
+            timezone: process.env.TIMEZONE // for writing to database
             // alter: true
         }
     },

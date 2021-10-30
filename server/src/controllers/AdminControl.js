@@ -2,18 +2,21 @@ const { User, Dosen, Mahasiswa,
   Captcha, Lupa_pw, Matakuliah,
   Ref_kel_matkul, Ref_peminatan,
   Ref_semester, Ref_role, Kelas,
-  Pengumuman, Paket_soal,
-  Rel_dosen_kelas } = require('../models');
+  Pengumuman, Paket_soal } = require('../models');
 const bcrypt = require('bcrypt');
 // const jwt = require('jsonwebtoken');
 const config = require('../config/dbconfig');
 const sequelize = require('sequelize');
 const path = require('path');
-const readXlsxFile = require('read-excel-file/node');
-const { paginator, pdfCreatestatus } = require('../helpers/global');
+const xlsx = require('xlsx');
+const schedule = require('node-schedule');
+const { paginator, pdfCreatestatus, todaysdate } = require('../helpers/global');
 const createError = require('../errorHandlers/ApiErrors');
 const { Op } = require('sequelize');
 
+const xlsxPath = (filename) => {
+  return path.join(__dirname,'../../public/fileuploads/xlsxInput/' + filename);
+}
 // function jwtSignuser (user) {
 //   const TIME = 60 * 60 * 24 * 1 // per-1 hari
 //   return jwt.sign(user, config.auth.secretKey, {
@@ -43,43 +46,55 @@ const hashed = async () => {
     })
   })
 }// hash default password, ada di .env
+
+const dosen = (model, noreg) => {
+  return model.findOne({
+    where:{[Op.or]:[
+      {NIDN:noreg},
+      {NIDK:noreg}
+    ]}
+  })
+}
 module.exports = {
-  /* Dashboard */
+  /* Dashboard 
+    stuff in dashboard: (front = cronned per day)
+    -graph stuff about:
+      1.  Number of active users of app, uses session
+      2.  Number of total users, update/day
+      3.  Number of total users /role, update/day
+      4.  Number of accessed kelas and matkul per month
+      5.  Number of paket soal created per day
+      6.  Number of ujian started and/or completed per day
+  */
   async getStatus(){
     const users = await User.count();
-      const userAdmin = await User.count({
-        where: {kode_role: '1'}
-      });
-      const userDosen = await User.count({
-        where: {kode_role: '2'}
-      });
-      const userMahasiswa = await User.count({
-        where: {kode_role: '3'}
-      });
-      const paketSoal = await Paket_soal.count();
-      return {
-        total_users: users,
-        jumlah_admin: userAdmin,
-        jumlah_dosen: userDosen,
-        jumlah_mhs: userMahasiswa,
-        total_paketSoal: paketSoal
-      }
+    const userAdmin = await User.count({
+      where: {kode_role: '1'}
+    });
+    const userDosen = await User.count({
+      where: {kode_role: '2'}
+    });
+    const userMahasiswa = await User.count({
+      where: {kode_role: '3'}
+    });
+    const paketSoal = await Paket_soal.count();
+    return [{
+      total_users: users,
+      jumlah_admin: userAdmin,
+      jumlah_dosen: userDosen,
+      jumlah_mhs: userMahasiswa,
+      total_paketSoal: paketSoal
+    }]
   },
 
   async getDashboard(req, res, next) {
-    try {
-      /*
-        stuff in dashboard:
-        -graph stuff about:
-          1.  Number of active users of app, uses session
-          2.  Number of total users, update/day
-          3.  Number of total users /role, update/day
-          4.  Number of accessed kelas and matkul per month
-          5.  Number of paket soal created per day
-          6.  Number of ujian started and/or completed per day
-      */
-      // const sessioned = express.session       
-      res.send(await module.exports.getStatus())
+    try {// updated once a day
+      schedule.scheduleJob('0 0 * * *', async () => {
+        const status = await module.exports.getStatus()
+        res.send({
+          statusApp: status
+        })
+      })
     } catch (error) {
       next(error);
     }
@@ -88,29 +103,49 @@ module.exports = {
   async printStatusPdf(req, res, next) {
     try {
       const obj = await module.exports.getStatus()
-      let col = [], rows = [], data;
-      data = [obj]
-      Object.keys(obj).forEach((key)=>{
-        col.push(key)
-      });      
+      let rows = [], i = 0, len, item;   
       const column = [
-        {text: col[0],style: 'tableHeader'}, {text: col[1],style: 'tableHeader'}, 
-        {text: col[2],style: 'tableHeader'}, {text: col[3],style: 'tableHeader'}, 
-        {text: col[4],style: 'tableHeader'}
+        {text: 'Total User',style: 'tableHeader'}, {text: 'Jumlah Admin',style: 'tableHeader'}, 
+        {text: 'Jumlah Dosen',style: 'tableHeader'}, {text: 'Jumlah Mahasiswa',style: 'tableHeader'}, 
+        {text: 'Total PaketSoal',style: 'tableHeader'}
       ]
-      for(let i of data){
-        rows.push(
-          {text: i.total_users,alignment: 'center'}, {text: i.jumlah_admin,alignment: 'center'}, 
-          {text: i.jumlah_dosen,alignment: 'center'}, {text: i.jumlah_mhs,alignment: 'center'},
-          {text: i.total_paketSoal,alignment: 'center'}
-        );
+      len = obj.length;
+      while (i < len) {
+        item = obj[i];
+        rows.push([
+            {text: item.total_users,alignment: 'center'}, {text: item.jumlah_admin,alignment: 'center'}, 
+            {text: item.jumlah_dosen,alignment: 'center'}, {text: item.jumlah_mhs,alignment: 'center'}, 
+            {text: item.total_paketSoal,alignment: 'center'}
+        ]);i++;
       }
-      pdfCreatestatus(data, column, rows, res)
+      pdfCreatestatus(column, rows, res)
     } catch (error) {
       next(error)
     }
   },
-  /* User operation */
+
+  async printStatusXcel(req, res, next) {
+    try {
+      const obj = await module.exports.getStatus()
+      let newWB = xlsx.utils.book_new()
+      let newWS = xlsx.utils.json_to_sheet(obj)
+      xlsx.utils.book_append_sheet(newWB, newWS, 'Status_app')
+      const wb_opts = {bookType: 'xlsx', type: 'base64'};
+      const file = xlsx.write(newWB, wb_opts)
+      const output = ((val)=>{
+        res.writeHead(200,{        
+          'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-status.xlsx"`
+        })
+        const download = Buffer.from(val.toString('utf-8'), 'base64');            
+        res.end(download);
+      })
+      output(file)
+      
+    } catch (error) {
+      next(error)
+    }
+  },
+  /* User operation methods */
   async getallUser(req, res, next) {
     try {
       const pages = parseInt(req.query.page);
@@ -254,19 +289,18 @@ module.exports = {
 
   async ubahUserbulk(req, res, next) {
     try {
-      if (req.file == undefined) {
+      if (req.file === undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-
-      let Path = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + req.file.filename);
-
-      let rows = await readXlsxFile(Path);
-        // skip header
-        rows.shift();
-
-        let updates = [];
-
-      for(let row of rows) {
+      const excelFile = xlsxPath(req.file.filename)
+      const wb = xlsx.readFile(excelFile);
+      let ws = {}, updates = [];
+      for (const sheetName of wb.SheetNames) {          
+          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      }
+      let rows = ws.User_updater      
+      rows.map((val)=>{
+        var row = Object.values(val)
         updates.push({
           id: row[0],
           username: row[1],
@@ -274,15 +308,14 @@ module.exports = {
           status_civitas: row[3],
           keterangan: row[4],
           updated_at: sequelize.fn('NOW')
-        })
-      }
+        })      
+      })
       await User.bulkCreate(updates, {
         updateOnDuplicate: [
           'id', 'username','email','status_civitas',
           'keterangan', 'updated_at'
         ]
       });
-
       res.status(200).json({
         success: true,
         msg: 'data user berhasil diubah sesuai: ' + req.file.originalname
@@ -326,7 +359,7 @@ module.exports = {
       next(error);
     }
   },
-  /* Profil admin operation */
+  /* Profil admin operation methods*/
   async getProfil(req, res, next) {
     try {
       const { id } = req.params;
@@ -392,7 +425,7 @@ module.exports = {
         next(error);
     }
   },
-  /* Daftar operation */
+  /* Daftar operation methods*/
   async daftar (req, res, next) {
     try {
         const { role, NIP, NIDN, NIDK, NIM, email, nama_lengkap, nomor_telp} = req.body;
@@ -419,10 +452,7 @@ module.exports = {
                   created_at: sequelize.fn('NOW')
                 }
               }, {
-                include: {
-                    model: Dosen,
-                    association: User.associations.Dosen
-              }
+                include: {model: Dosen, as: 'Dosen'}
             });
           }
         } else if ( role === 'Mahasiswa' ) {
@@ -441,10 +471,7 @@ module.exports = {
                 created_at: sequelize.fn('NOW')
               }
             }, {
-              include: {
-                  model: Mahasiswa,
-                  association: User.associations.Mahasiswa
-            }
+              include: {model: Mahasiswa, as: 'Mahasiswa'}
           });
         }
       }
@@ -462,7 +489,7 @@ module.exports = {
         next(error);
     }
   },
-  /* Dosen operation */
+  /* Dosen operation methods*/
   async getallDosen(req, res, next) {
     try {
       const pages = parseInt(req.query.page);
@@ -525,42 +552,41 @@ module.exports = {
       if (req.file == undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-
-      let Path = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + req.file.filename);
-
-      let rows = await readXlsxFile(Path);
-        // skip header
-        rows.shift();
-
-        for(let row of rows) {
-          let userId = await getUserid()+1;
-          let pass = await hashed();
-          await User.create({
-            username: 'User'+' '+ userId,
-            email: row[4],
-            status_civitas: 'aktif',
-            password: pass,
-            kode_role: '2',
-            created_at: sequelize.fn('NOW'),
-            Dosen: {
-                NIP: row[0],
-                NIDN: row[1],
-                NIDK: row[2],
-                nama_lengkap: row[3],
-                nomor_telp: '0'+row[5],
-                created_at: sequelize.fn('NOW')
-              }
-          }, {
-            include: {
-              model: Dosen,
-              association: User.associations.Dosen
+      const excelFile = xlsxPath(req.file.filename)
+      const wb = xlsx.readFile(excelFile);
+      let ws = {};
+      for (const sheetName of wb.SheetNames) {          
+          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      }
+      let rows = ws.User_dosen
+      rows = rows.map((i) => {
+        return Object.values(i)
+      })
+      for(let row of rows) {
+        let userId = await getUserid()+1;
+        let pass = await hashed();
+        await User.create({
+          username: 'User'+' '+ userId,
+          email: row[4],
+          status_civitas: 'aktif',
+          password: pass,
+          kode_role: '2',
+          created_at: sequelize.fn('NOW'),
+          Dosen: {
+              NIP: row[0],
+              NIDN: row[1],
+              NIDK: row[2],
+              nama_lengkap: row[3],
+              nomor_telp: '0'+row[5],
+              created_at: sequelize.fn('NOW')
             }
-          });
-        }
-
-        res.status(200).send({
-          msg: 'data berhasil diimport ke DB: ' + req.file.originalname
-        })
+        }, {
+          include: { model: Dosen, as: 'Dosen'}
+        });
+      }
+      res.status(200).send({
+        msg: 'data berhasil diimport ke DB: ' + req.file.originalname
+      })
     } catch (error) {
       console.log('periksa excelnya');
       next(error);
@@ -603,16 +629,15 @@ module.exports = {
       if (req.file == undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-
-      let Path = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + req.file.filename);
-
-      let rows = await readXlsxFile(Path);
-        // skip header
-        rows.shift();
-
-        let updates = [];
-
-      for(let row of rows) {
+      const excelFile = xlsxPath(req.file.filename)
+      const wb = xlsx.readFile(excelFile);
+      let ws = {}, updates = [];
+      for (const sheetName of wb.SheetNames) {          
+          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      }
+      let rows = ws.Dosen_updater
+      rows.map((val)=>{
+        var row = Object.values(val)
         updates.push({
           kode_dosen: row[0],
           NIP: row[1],
@@ -622,15 +647,14 @@ module.exports = {
           alamat: row[5],
           nomor_telp: '0'+row[6],
           updated_at: sequelize.fn('NOW')
-        })
-      }
+        })      
+      });
       await Dosen.bulkCreate(updates, {
         updateOnDuplicate: [
           'NIP','NIDN','NIDK','nama_lengkap',
           'alamat','nomor_telp', 'updated_at'
         ]
       });
-
       res.status(200).json({
         success: true,
         msg: 'data dosen berhasil diubah sesuai: ' + req.file.originalname
@@ -665,7 +689,7 @@ module.exports = {
       next(error);
     }
   },
-  /* Mahasiswa opearation */
+  /* Mahasiswa opearation methods*/
   async getallMhs(req, res, next) {
     try {
       const pages = parseInt(req.query.page);
@@ -726,40 +750,39 @@ module.exports = {
       if (req.file == undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-
-      let Path = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + req.file.filename);
-
-      let rows = await readXlsxFile(Path);
-        // skip header
-        rows.shift();
-
-        for(let row of rows) {
-          let userId = await getUserid()+1;
-          let pass = await hashed();
-          await User.create({
-            username: 'User'+' '+ userId,
-            email: row[2],
-            status_civitas: 'aktif',
-            password: pass,
-            kode_role: '3',
-            created_at: sequelize.fn('NOW'),
-            Mahasiswa: {
-                NIM: row[0],
-                nama_lengkap: row[1],
-                nomor_telp: '0'+row[3],
-                created_at: sequelize.fn('NOW')
-              }
-          }, {
-            include: {
-              model: Mahasiswa,
-              association: User.associations.Mahasiswa
+      const excelFile = xlsxPath(req.file.filename)
+      const wb = xlsx.readFile(excelFile);
+      let ws = {};
+      for (const sheetName of wb.SheetNames) {          
+          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName]);
+      }
+      let rows = ws.User_mahasiswa
+      rows = rows.map((i) => {
+        return Object.values(i)
+      })
+      for(let row of rows) {
+        let userId = await getUserid()+1;
+        let pass = await hashed();
+        await User.create({
+          username: 'User'+' '+ userId,
+          email: row[2],
+          status_civitas: 'aktif',
+          password: pass,
+          kode_role: '3',
+          created_at: sequelize.fn('NOW'),
+          Mahasiswa: {
+              NIM: row[0],
+              nama_lengkap: row[1],
+              nomor_telp: '0'+row[3],
+              created_at: sequelize.fn('NOW')
             }
-          });
-        }
-
-        res.status(200).send({
-          msg: 'data berhasil diimport ke DB: ' + req.file.originalname
-        })
+        }, {
+          include: {model: Mahasiswa, as: 'Mahasiswa'}
+        });
+      }
+      res.status(200).send({
+        msg: 'data berhasil diimport ke DB: ' + req.file.originalname
+      })
     } catch (error) {
       console.log('periksa excelnya');
       next(error);
@@ -800,16 +823,15 @@ module.exports = {
       if (req.file == undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-
-      let Path = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + req.file.filename);
-
-      let rows = await readXlsxFile(Path);
-        // skip header
-        rows.shift();
-
-        let updates = [];
-
-      for(let row of rows) {
+      const excelFile = xlsxPath(req.file.filename)
+      const wb = xlsx.readFile(excelFile);
+      let ws = {}, updates = [];
+      for (const sheetName of wb.SheetNames) {          
+          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName]);
+      }
+      let rows = ws.Mahasiswa_updater
+      rows.map((val)=>{
+        var row = Object.values(val)
         updates.push({
           kode_mhs: row[0],
           NIM: row[1],
@@ -818,7 +840,7 @@ module.exports = {
           nomor_telp: '0'+row[4],
           updated_at: sequelize.fn('NOW')
         })
-      }
+      })
       await Mahasiswa.bulkCreate(updates, {
         updateOnDuplicate: [
           'NIM','nama_lengkap','alamat',
@@ -860,7 +882,7 @@ module.exports = {
       next(error);
     }
   },
-  /* Matakuliah operation */
+  /* Matakuliah operation methods*/
   async getallMatkul(req, res, next) {
     try {
       const pages = parseInt(req.query.page);
@@ -956,7 +978,7 @@ module.exports = {
     }
   },
 
-  async matakuliahAdd(req, res, next){
+  async setMatkul(req, res, next){
     try {
       const { kode_matkul, kelompok_matkul, peminatan, nama_matkul, semester, sks, deskripsi } = req.body;
       const getKelmk = await Ref_kel_matkul.findOne({where:{kelompok_matakuliah:kelompok_matkul}});
@@ -984,48 +1006,49 @@ module.exports = {
     }
   },
 
-  async matakuliahAddbulk(req, res, next) {
+  async setMatkulbulk(req, res, next) {
     try {
       if (req.file == undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-
-      let Path = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + req.file.filename);
-
-      let rows = await readXlsxFile(Path);
-        // skip header
-        rows.shift();
-
-        let matkuls = [];
-
-        for(let row of rows) {
-          let val = {
-            getKelmk: await Ref_kel_matkul.findOne({where:{kelompok_matakuliah:row[1]}}),
-            getPemin: await Ref_peminatan.findOne({where:{peminatan:row[2]}}),
-            getSms: await Ref_semester.findOne({where:{semester:row[4]}})
-          }
-          matkuls.push({
-            kode_matkul: row[0],
-            kode_kel_mk: val.getKelmk.kode_kel_mk,
-            kode_peminatan: val.getPemin.kode_peminatan,
-            nama_matkul: row[3],
-            semester: val.getSms.kode_semester,
-            sks: row[5],
-            deskripsi: row[6]
-          })
+      const excelFile = xlsxPath(req.file.filename)
+      const wb = xlsx.readFile(excelFile);
+      let ws = {}, matkuls = [];
+      for (const sheetName of wb.SheetNames) {          
+          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName]), {defval:null};
+      }
+      let rows = ws.Matakuliah
+      rows = rows.map((i) => {
+        return Object.values(i)    
+      })
+      for(let row of rows) {
+        let val = {
+          getKelmk: await Ref_kel_matkul.findOne({where:{kelompok_matakuliah:row[1]}}),
+          getPemin: await Ref_peminatan.findOne({where:{peminatan:row[2]}}),
+          getSms: await Ref_semester.findOne({where:{semester:row[4]}})
         }
-        await Matakuliah.bulkCreate(matkuls).then(() => {
-          res.status(200).send({
-            msg: 'data berhasil diimport ke DB: ' + req.file.originalname
-          })
+        matkuls.push({
+          kode_matkul: row[0],
+          kode_kel_mk: val.getKelmk.kode_kel_mk,
+          kode_peminatan: val.getPemin.kode_peminatan,
+          nama_matkul: row[3],
+          semester: val.getSms.kode_semester,
+          sks: row[5],
+          deskripsi: row[6]
         })
+      }
+      await Matakuliah.bulkCreate(matkuls).then(() => {
+        res.status(200).send({
+          msg: 'data berhasil diimport ke DB: ' + req.file.originalname
+        })
+      })
     } catch (error) {
       console.log('periksa excelnya');
       next(error);
     }
   },
 
-  async matkulEdit(req, res, next) {
+  async editMatkul(req, res, next) {
     try {
       const { kode_matkul } = req.params;
       const { kode_mk, kelompok_mk, peminatan,
@@ -1066,26 +1089,27 @@ module.exports = {
     }
   },
 
-  async matkulEditbulk(req, res, next) {
+  async editMatkulbulk(req, res, next) {
     try {
       if (req.file == undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-
-      let Path = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + req.file.filename);
-
-      let rows = await readXlsxFile(Path);
-        // skip header
-        rows.shift();
-
-        let updates = [];
-
-      for(let row of rows) {
+      const excelFile = xlsxPath(req.file.filename)
+      const wb = xlsx.readFile(excelFile);
+      let ws = {}, updates = [];
+      for (const sheetName of wb.SheetNames) {          
+          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      }
+      let rows = ws.Matakuliah_updater
+      rows = rows.map((i) => {
+        return Object.values(i)
+      })
+      for(let row of rows){
         let val = {
           getKelmk: await Ref_kel_matkul.findOne({where:{kelompok_matakuliah:row[1]}}),
           getPemin: await Ref_peminatan.findOne({where:{peminatan:row[2]}}),
           getSms: await Ref_semester.findOne({where:{semester:row[4]}})
-        }
+        };
         updates.push({
           kode_matkul: row[0],
           kode_kel_mk: val.getKelmk.kode_kel_mk,
@@ -1095,7 +1119,7 @@ module.exports = {
           sks: row[5],
           deskripsi: row[6],
           updated_at: sequelize.fn('NOW')
-        })
+        }) 
       }
       await Matakuliah.bulkCreate(updates, {
         updateOnDuplicate: [
@@ -1103,7 +1127,6 @@ module.exports = {
           'nama_matkul','semester','sks','deskripsi','updated_at',
         ]
       });
-
       res.status(200).json({
         success: true,
         msg: 'data matakuliah berhasil diubah sesuai: ' + req.file.originalname
@@ -1114,7 +1137,7 @@ module.exports = {
     }
   },
 
-  async matkulDelete(req, res, next) {
+  async deleteMatkul(req, res, next) {
     try {
         const { kode_matkul } = req.params;
         const getMatkul = await Matakuliah.findOne({
@@ -1138,21 +1161,13 @@ module.exports = {
       next(error);
     }
   },
-  /* Kelas operation*/
-  async kelasAddDosen(req, res, next) {
+  /* Kelas operation methods*/
+  async kelasSetDosen(req, res, next) {
     try {
       const { kode_seksi } = req.params
       const { pengampu } = req.body
       let val = [], nidk = [];
       const kls = await Kelas.findByPk(kode_seksi)
-      const dosen = (model, noreg) => {
-        return model.findOne({
-          where:{[Op.or]:[
-            {NIDN:noreg},
-            {NIDK:noreg}
-          ]}
-        })
-      }
       if(!pengampu.noreg_dosen1){
         throw createError.BadRequest('dosen 1 tidak boleh kosong!')
       } else {
@@ -1175,20 +1190,12 @@ module.exports = {
     }
   },
 
-  async kelasChangeDosen(req, res, next) {
+  async kelasUpdateDosen(req, res, next) {
     try {
       const { kode_seksi } = req.params
       const { pengampu } = req.body
       let val = [], nidk = [], temp= [];
-      const kls = await Kelas.findByPk(kode_seksi)
-      const dosen = (model, noreg) => {
-        return model.findOne({
-          where:{[Op.or]:[
-            {NIDN:noreg},
-            {NIDK:noreg}
-          ]}
-        })
-      }
+      const kls = await Kelas.findByPk(kode_seksi)      
       if(!pengampu.noreg_dosen1){
         throw createError.BadRequest('dosen 1 tidak boleh kosong!')
       } else {
@@ -1216,29 +1223,42 @@ module.exports = {
   async kelasRemoveDosen(req, res, next) {
     try {
       const { kode_seksi } = req.params
+      const { pengampu } = req.body
+      let val = [], nidk = [];
       const kls = await Kelas.findByPk(kode_seksi)      
-      kls.setDosens([])
-      // console.log(Object.keys(kls.__proto__))
+      val[0] = await dosen(Dosen, pengampu.noreg_dosen1)
+      val[1] = await dosen(Dosen, pengampu.noreg_dosen2)
+      val[2] = await dosen(Dosen, pengampu.noreg_dosen3)
+      for(let i of val){
+        if(i != null){
+          nidk.push(i.NIDK)
+          kls.removeDosen(i)
+        } else {
+          throw createError.BadRequest(
+            `tidak ada dosen yang dihapus untuk kode seksi ${kode_seksi}`
+          )
+        }
+      }
       res.status(200).json({
         success: true,
-        msg: `semua dosen pengampu kode seksi ${kode_seksi}, berhasil dihapus`
+        msg: `dosen pengampu ${nidk} untuk kode seksi ${kode_seksi}, berhasil dihapus`
       })      
     } catch (error) {
       next(error)
     }
   },
 
-  async kelasAdd(req, res, next){
+  async setKelas(req, res, next){
     try {
-      const { kode_seksi, noreg_dosen, nama_matkul, hari, jam, deskripsi } = req.body;
+      let val = [], nidk = [];
+      const { kode_seksi, noreg_dosen1, noreg_dosen2, noreg_dosen3, nama_matkul, hari, jam, deskripsi } = req.body;
       const getKodeMK = await Matakuliah.findOne({where:{nama_matkul:nama_matkul}});
-      const getDosen = await Dosen.findOne({
-        where:{[Op.or]:[
-          {NIDN:noreg_dosen},
-          {NIDK:noreg_dosen}
-        ]}
-      })
-      if(!getKodeMK||!getDosen) {throw createError.BadRequest('nama matakuliah atau dosen tidak terdaftar!')}
+      val[0] = await dosen(Dosen, noreg_dosen1)
+      val[1] = await dosen(Dosen, noreg_dosen2)
+      val[2] = await dosen(Dosen, noreg_dosen3)
+      if(!getKodeMK) {
+        throw createError.BadRequest('nama matakuliah tidak terdaftar!')
+      }
       const kelas = await Kelas.create({
         kode_seksi: kode_seksi,
         kode_matkul: getKodeMK.kode_matkul,
@@ -1246,87 +1266,93 @@ module.exports = {
         jam: jam,
         deskripsi: deskripsi
       })
-      getDosen.addKelas(kelas)
+      for(let i of val){
+        if(i != null){
+          nidk.push({noreg_dosen: i.NIDK})
+          kelas.addDosen(i)
+        } else if (!i[0]){
+          throw createError.BadRequest(
+            'dosen 1 tidak boleh kosong euy!' //easter egg
+          )
+        }
+      }
       res.status(200).json({
         success: true,
         msg: 'kelas berhasil ditambahkan',
         kode_seksi: kode_seksi,        
         matkul: getKodeMK.nama_matkul,
-        pengampu: getDosen.nama_lengkap
+        pengampu: nidk
       });
     } catch (error) {
       next(error);
     }
   },
 
-  async kelasAddbulk(req, res, next) {
+  async setKelasbulk(req, res, next) {
     try {
       if (req.file == undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-
-      let Path = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + req.file.filename);
-
-      let rows = await readXlsxFile(Path);
-        // skip header
-        rows.shift();
-
-        let kelass = [];
-
-        for(let row of rows) {
-          let val = {
-            getKodeMK: await Matakuliah.findOne({where:{nama_matkul:row[1]}}),
-            getDosen: await Dosen.findOne({
-                where:{[Op.or]:[
-                {NIDN:row[5]},
-                {NIDK:row[5]}
-              ]}
-            })
-          }
-          kelass.push({
-            kode_seksi: row[0],
-            kode_matkul: val.getKodeMK.kode_matkul,
-            hari: row[2],
-            jam: row[3],
-            deskripsi: row[4]
-          })
-          await Rel_dosen_kelas.create({ 
-            kode_dosen: val.getDosen.kode_dosen,
-            kode_seksi: row[0]
-          })
-        }
-        await Kelas.bulkCreate(kelass).then(() => {
-          res.status(200).send({
-            msg: 'data berhasil diimport ke DB: ' + req.file.originalname
-          })
+      const excelFile = xlsxPath(req.file.filename)
+      const wb = xlsx.readFile(excelFile);
+      let ws = {};
+      for (const sheetName of wb.SheetNames) {          
+          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      }
+      let rows = ws.Kelas, val = [];
+      rows = rows.map((i) => {
+        return Object.values(i)    
+      })
+      for(let row of rows) {
+        let getMk = await Matakuliah.findOne({where:{nama_matkul:row[1]}})
+        val[0] = await dosen(Dosen, row[5])
+        val[1] = await dosen(Dosen, row[6])
+        val[2] = await dosen(Dosen, row[7])
+        let kelas = await Kelas.create({
+          kode_seksi: row[0],
+          kode_matkul: getMk.kode_matkul,
+          hari: row[2],
+          jam: row[3],
+          deskripsi: row[4]
         })
+        for(let i of val){
+          if(i != null){
+            kelas.addDosen(i)
+          } else if (!i[0]){
+            throw createError.BadRequest(
+              `dosen 1 tidak boleh kosong ${row[0]}`
+            )
+          }
+        }       
+      }
+      res.status(200).send({
+        msg: 'data berhasil diimport ke DB: ' + req.file.originalname
+      })             
     } catch (error) {
       console.log('periksa excelnya');
       next(error);
     }
   },
 
-  async kelasEdit(req, res, next) {
+  async editKelas(req, res, next) {
     try {
       const { kode_seksi } = req.params;
-      const { kode_sksi, noreg_dosen, matakuliah, hari, jam, deskripsi } = req.body;
+      const { kode_sksi, noreg_dosen1, noreg_dosen2, noreg_dosen3, nama_matkul, hari, jam, deskripsi } = req.body;
+      let val = [], temp = [];
       if (!kode_sksi) {
         throw createError.BadRequest('tolong diisi!');
       } else {
-        const getKelas = await Kelas.findByPk(kode_seksi);
-        const getDosen = await Dosen.findOne({
-          where:{[Op.or]:[
-            {NIDN:noreg_dosen},
-            {NIDK:noreg_dosen}
-          ]}
-        })
-        if (!getKelas){throw createError.BadRequest('kelas tidak terdaftar!')}
-        const mk = await getKelas.getMatkul({
-          where:{nama_matkul: matakuliah}
-        });
+        const getKelas = await Kelas.findByPk(kode_seksi)
+        const getKodeMK = await Matakuliah.findOne({where:{nama_matkul:nama_matkul}});
+        val[0] = await dosen(Dosen, noreg_dosen1)
+        val[1] = await dosen(Dosen, noreg_dosen2)
+        val[2] = await dosen(Dosen, noreg_dosen3)
+        if (!getKelas||!getKodeMK){
+          throw createError.BadRequest('kelas atau matakuliah tidak terdaftar!')
+        }
         let updateVal = {
             kode_seksi: kode_sksi,
-            kode_matkul: mk.kode_matkul,
+            kode_matkul: getKodeMK.kode_matkul,
             hari: hari,
             jam: jam,
             deskripsi: deskripsi,
@@ -1335,8 +1361,12 @@ module.exports = {
         await Kelas.update(updateVal, {
           where: { kode_seksi: kode_seksi }
         });
-        getKelas.setDosen(getDosen)
-
+        for(let i of val){
+          if(i != null) {
+            temp.push(i)
+          }
+        }
+        getKelas.setDosens(temp)
         res.status(200).json({
           success: true,
           msg: 'data kelas berhasil diubah',
@@ -1348,52 +1378,48 @@ module.exports = {
     }
   },
 
-  async kelasEditbulk(req, res, next) {
+  async editKelasbulk(req, res, next) { // TODO: this!
     try {
       if (req.file == undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-
-      let Path = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + req.file.filename);
-
-      let rows = await readXlsxFile(Path);
-        // skip header
-        rows.shift();
-
-        let updates = [];
-
-      for(let row of rows) {
-        let val = {
-          getMatkul: await Matakuliah.findOne({where:{nama_matkul:row[1]}}),
-          getDosen: await Dosen.findOne({
-            where:{[Op.or]:[
-            {NIDN:row[5]},
-            {NIDK:row[5]}
-          ]}
-        })
-        }
+      const excelFile = xlsxPath(req.file.filename)
+      const wb = xlsx.readFile(excelFile);
+      let ws = {}, updates = [];
+      for (const sheetName of wb.SheetNames) {          
+          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      }
+      let rows = ws.Matakuliah_updater, val = [], temp = [];
+      rows = rows.map((i) => {
+        return Object.values(i)    
+      })
+      for(let row of rows){        
+        let getMk = await Matakuliah.findOne({where:{nama_matkul:row[1]}})
+        let getKelas = await Kelas.findByPk(row[0])
+        val[0] = await dosen(Dosen, row[5])
+        val[1] = await dosen(Dosen, row[6])
+        val[2] = await dosen(Dosen, row[7])        
         updates.push({
           kode_seksi: row[0],
-          kode_matkul: val.getMatkul.kode_matkul,
+          kode_matkul: getMk.kode_matkul,
           hari: row[2],
           jam: row[3],
           deskripsi: row[4],
           updated_at: sequelize.fn('NOW')
         })
-        if(val.getDosen != null){
-          await Rel_dosen_kelas.update({ 
-            kode_dosen: val.getDosen.kode_dosen,
-            kode_seksi: row[0]
-          })
-        }        
+        for(let i of val){
+          if(i != null) {
+            temp.push(i)
+          }
+        }
+        getKelas.setDosens(temp)
       }
       await Kelas.bulkCreate(updates, {
         updateOnDuplicate: [
           'kode_seksi','kode_matkul','hari',
           'jam','deskripsi','updated_at',
         ]
-      });
-
+      });      
       res.status(200).json({
         success: true,
         msg: 'data kelas berhasil diubah sesuai: ' + req.file.originalname
@@ -1404,26 +1430,16 @@ module.exports = {
     }
   },
 
-  async kelasDelete(req, res, next) {
+  async deleteKelas(req, res, next) {
     try {
         const { kode_seksi } = req.params;
-        const getKelas = await Kelas.findOne({
-          where: {kode_seksi:kode_seksi},
-          include: {model: Dosen, as: 'Dosen'}
-        });
+        const getKelas = await Kelas.findByPk(kode_seksi)
         if (!getKelas) { throw createError.NotFound('data tidak ditemukan')}
         await Kelas.destroy({
           where:{
             kode_seksi: getKelas.kode_seksi
           }});
-        for (let i of getKelas.Dosen) {
-          await Rel_dosen_kelas.destroy({
-            where:{[Op.and]:[
-              {kode_dosen:i.kode_dosen},
-              {kode_seksi:getKelas.kode_seksi}
-            ]}
-          })
-        }
+        getKelas.setDosens([])
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -1432,7 +1448,7 @@ module.exports = {
       next(error);
     }
   },
-  /* Lupa Password operation */
+  /* Lupa Password operation methods*/
   async getLupapw(req, res, next) {
     try {
       const pages = parseInt(req.query.page);
@@ -1471,7 +1487,7 @@ module.exports = {
     }
   },
 
-  async hapusLupapw(req, res, next) {
+  async deleteLupapw(req, res, next) {
     try {
         const { kode_reset } = req.params;
         const getlupapw = await Lupa_pw.findByPk(kode_reset)
@@ -1489,7 +1505,7 @@ module.exports = {
       next(error);
     }
   },
-  /* Pengumuman operation */
+  /* Pengumuman operation methods*/
   async getPengumumanAll(req, res, next) {
     try {
       const pages = parseInt(req.query.page);
@@ -1579,7 +1595,7 @@ module.exports = {
       next(error);
     }
   },
-  /* Captcha operation */
+  /* Captcha operation methods*/
   async getCaptchaAll(req, res, next) {
     try {
       const pages = parseInt(req.query.page);
@@ -1633,7 +1649,7 @@ module.exports = {
       next(error);
     }
   },
-  /* Semester operation */
+  /* Semester operation methods*/
   async getSmstrAll(req, res, next) {
     try {
       const pages = parseInt(req.query.page);

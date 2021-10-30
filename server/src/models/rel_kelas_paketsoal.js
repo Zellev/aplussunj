@@ -11,12 +11,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         kode_paket: { 
-            type: DataTypes.INTEGER(20).UNSIGNED,
+            type: DataTypes.STRING(11),
             allowNull: false
         },
         jenis_ujian: {
-            type: DataTypes.INTEGER(11).UNSIGNED,
-            allowNull: false,
+            type: DataTypes.INTEGER(11).UNSIGNED
         }
     }, {
         freezeTableName: true,
