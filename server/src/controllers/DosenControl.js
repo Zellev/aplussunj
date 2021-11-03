@@ -1,7 +1,6 @@
-const { Dosen, Kelas, Paket_soal, 
-        Ref_jenis_ujian, Rel_kelas_paketsoal, 
-        sequelize } = require('../models')
-// const sequelize = require('sequelize')
+const { Dosen, Kelas, Paket_soal, Ref_jenis_ujian, 
+        Rel_kelas_paketsoal } = require('../models')
+const sequelize = require('sequelize')
 const createError = require('../errorHandlers/ApiErrors');
 const { createKode } = require('../helpers/global');
 const { format } = require('date-fns');
@@ -17,10 +16,6 @@ module.exports = {
       * 
       */
       const user = req.user;
-      if(user.kode_role === 1) {
-        console.log(`admin ${user.username} testing endpoint`)
-        throw createError.BadRequest('ganti dengan akun dosen-test untuk testing!')
-      }
       const kelas = await user.getDosen({
         include: [
           { model: Kelas, as: 'Kelases', required: true,
@@ -66,10 +61,21 @@ module.exports = {
   async setPaketsoal(req, res, next){
     try {
       const kdPaket = createKode(5)
-      const kdSeksi = parseInt(req.params.kode_seksi)
+      const kdSeksi = req.body.kode_seksi
       const { judul_ujian, jenis_ujian, tanggal_mulai, waktu_mulai, durasi_ujian, bobot_total, deskripsi } = req.body     
       const refJenis = await Ref_jenis_ujian.findOne({where:{jenis_ujian:jenis_ujian}})
       const date = format(new Date(String(tanggal_mulai)), 'yyyy-MM-dd')
+      const pkCheck = await Paket_soal.findAll({
+        where:{waktu_mulai:waktu_mulai},
+        include:{model:Kelas,as:'Kelases',where:{kode_seksi:kdSeksi}}
+      })
+      if(pkCheck.length !== 0){
+        const filterProc = ({kode_seksi}) => kode_seksi !== kdSeksi;
+        let kosek = pkCheck.flatMap(el => el.Kelases).filter(filterProc);
+        kosek = kosek.map(({kode_seksi}) => kode_seksi)
+        throw createError.Conflict(`waktu mulai ujian ${waktu_mulai} pada kelas ini
+              bentrok dengan kelas ${kosek}`)
+      }      
       await Paket_soal.create({
         kode_paket: kdPaket,
         judul_ujian: judul_ujian,
@@ -100,9 +106,31 @@ module.exports = {
     }
   },
   
-  async getPaketsoal(req, res, next){
+  async getAllPaketsoal(req, res, next){
     try {
-      // test
+      //TODO: get all paket soal of a dosen regardless of class
+      //      like an archive feature for paket soals
+      // const pages = parseInt(req.query.page);
+      // const limits = parseInt(req.query.limit);
+      // const user = req.user
+      // let opt = {
+      //   where: {id_user: user.id},
+      //   offset: (pages - 1) * limits,
+      //   limit: limits,
+      //   include: {
+      //     model: Kelas, as: 'Kelases',
+      //     include: {
+      //       model: Paket_soal, as: 'PaketSoals'
+      //     }
+      //   }
+      // }
+      // let pkSoal = await paginator(Dosen, pages, limits, opt);
+      // if (pkSoal.results.length === 0) {temp.push('No Record...')}
+      // res.send({
+      //     next: val.next,
+      //     previous: val.previous,
+      //     kelas: kelas
+      // });
     } catch (error) {
       next(error)
     }

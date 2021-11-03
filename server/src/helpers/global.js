@@ -28,12 +28,23 @@ module.exports = {
             }
         }
         if(options){
+          if( 'countModel' in options){
+            if (endIndex < await options.countModel.count()) {
+              results.next = {
+                  page: page + 1,
+                  limit: limit
+              }
+            }
+            delete options.countModel
             results.results = await model.findAll(options)
+          } else {
+            results.results = await model.findAll(options)
+          }          
         } else {
-            results.results = await model.findAll({
-                offset:startIndex,
-                limit:limit
-            })
+          results.results = await model.findAll({
+              offset:startIndex,
+              limit:limit
+          })
         }        
         return results
     },
@@ -61,7 +72,7 @@ module.exports = {
 
     createKode(length) {
         let result = '';
-        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        const characters = 'ABC0DEF1GHI2JKL3MNO4PQR5STU6VWX7YZ0812394560789';
         let charactersLength = characters.length;
         for ( var i = 0; i < length; i++ ) {
           result += characters.charAt(Math.floor(Math.random() * charactersLength));

@@ -1,7 +1,9 @@
 const bcrypt = require('bcrypt');
-const sequelize = require('sequelize')
+const sequelize = require('sequelize');
+const jp = require('jsonpath');
 const { User, Dosen, Matakuliah, Kelas, 
-        Pengumuman, Ref_semester, Paket_soal } = require('../models');
+        Pengumuman, Ref_semester, Ref_jenis_ujian,
+        Paket_soal } = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
 const { paginator } = require('../helpers/global');
 const { Op } = require('sequelize');
@@ -50,14 +52,13 @@ module.exports = {
             });
             res.status(200).json({
                 success: true,
-                msg: 'Password Berhasil Diubah!',
-                password_baru: new_password
+                msg: 'Password Berhasil Diubah!'
             })
           }else {
-            throw createError.BadRequest('password tidak sama')
+            throw createError.BadRequest('password tidak sama!')
           }
         } else {
-          throw createError.BadRequest('password lama salah')
+          throw createError.BadRequest('password lama salah!')
         }
     } catch(error) {
         next(error);
@@ -81,68 +82,105 @@ module.exports = {
     }
   },
 
-  async cariperSemester(req, res, next) {
+  async getperSemester(req, res, next) {
     try {
       let { kode_semester } = req.params;
-      let vals = [], temp = [];
+      let vals = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {
         where: { kode_semester: kode_semester },
-        include: {
+        include: {         
           model: Matakuliah, as: 'Matkul',
           offset: (pages - 1) * limits,
-          limit: limits,
-          include: { 
+          limit: limits,                 
+          include: {            
             model: Kelas, as: 'Kelas',
-            attributes: ['kode_seksi', 'kode_matkul', 'hari', 'jam']              
-          }
-        }
+            attributes: ['kode_seksi', 'kode_matkul', 'hari', 'jam'],
+            include: {model: Dosen, as: 'Dosens', attributes: ['nama_lengkap'],
+            through: {attributes:[]} }            
+          },
+        },
+        countModel: Kelas
       }
-      const sms = await paginator(Ref_semester, pages, limits, opt)
-      for (let i of sms.results[0].Matkul){          
-        temp.push(i.Kelas)
-      }
-      for (let j of temp.flat()){
-        let matkul = await j.getMatkul()
+      const sms = await paginator(Ref_semester, pages, limits, opt);
+      const kelas = jp.query(sms.results[0], '$.Matkul[*].Kelas');      
+      for (let i of kelas.flat()){
+        let matkul = await i.getMatkul()
         vals.push({
-          kode_seksi: j.kode_seksi,
+          kode_seksi: i.kode_seksi,
           matkul: matkul.nama_matkul,
-          hari: j.hari,
-          jam: j.jam
+          hari: i.hari,
+          jam: i.jam,
+          dosen_pengampu: i.Dosens
         })
       }
-      
       if (vals.length === 0) {vals.push('No Record...')}
       res.send({
         next: sms.next,
         previous: sms.previous,
-        vals
+        kelas: vals
+      })
+    } catch (error) {
+      next(error)
+    }
+  },
+  /* PaketSoal Methods */
+  async getPaketsoal(req, res, next){
+    try {
+      const { kode_paket } = req.params
+      const pkSoal = await Paket_soal.findOne({
+        where:{kode_paket:kode_paket},
+        include:{model:Ref_jenis_ujian, as:'RefJenis'}
+      });
+      let status;
+      if(req.user.kode_role === 1 || req.user.kode_role === 2){
+        if(pkSoal.status === 'draft'){
+          status = 'DRAFT'
+        } else {
+          status = 'TERBIT'
+        }
+      } else {
+        status = 'TERBIT'
+      }
+      res.send({
+        kode_paket: pkSoal.kode_paket,
+        jenis_ujian: pkSoal.RefJenis.jenis_ujian,
+        judul_ujian: pkSoal.judul_ujian,
+        tanggal_mulai: pkSoal.tanggal_mulai,
+        waktu_mulai: pkSoal.waktu_mulai,
+        durasi_ujian: pkSoal.durasi_ujian,
+        bobot_total: pkSoal.bobot_total,
+        status: status
       })
     } catch (error) {
       next(error)
     }
   },
   /* Kelas Methods*/
-  async getallKelas(req, res, next) {
+  async getAllKelas(req, res, next) {
     try {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
         let val = await paginator(Kelas, pages, limits);
         let vals = [];
-        for(let i of val.results) {
-        let matkul = await i.getMatkul()
-        let dosen = await i.getDosens({
-          attributes: ['nama_lengkap'],
-          joinTableAttributes: [] // Remove join table attribute!
-        })
-          vals.push({
+        if(val.results.length !== 0){
+          for(let i of val.results) {
+            let matkul = await i.getMatkul()
+            let dosen = await i.getDosens({
+              attributes: ['nama_lengkap'],
+              joinTableAttributes: [] // Remove join table attribute!
+            })
+            vals.push({
               kode_seksi: i.kode_seksi,
               nama_matkul: matkul.nama_matkul,
               hari: i.hari,
               jam: i.jam,
               dosen_pengampu: dosen
-          })
+            })
+          }
+        } else {
+          vals.push('no record...')
         }
         const kelas = await Promise.all(vals);
         res.send({
@@ -225,7 +263,7 @@ module.exports = {
             }, through: {attributes:[]}, where: {status: status}}
           ]
         })
-        // if (!val) { throw createError.BadRequest('kelas tidak terdaftar!')}
+        if (!val) { throw createError.BadRequest('kelas tidak terdaftar!')}
         const kelas = {
           kode_seksi: val.kode_seksi,
           nama_matkul: val.Matkul.nama_matkul,

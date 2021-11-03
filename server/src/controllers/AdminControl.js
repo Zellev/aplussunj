@@ -9,7 +9,7 @@ const config = require('../config/dbconfig');
 const sequelize = require('sequelize');
 const path = require('path');
 const xlsx = require('xlsx');
-const schedule = require('node-schedule');
+// const schedule = require('node-schedule');
 const { paginator, pdfCreatestatus, todaysdate } = require('../helpers/global');
 const createError = require('../errorHandlers/ApiErrors');
 const { Op } = require('sequelize');
@@ -88,12 +88,10 @@ module.exports = {
   },
 
   async getDashboard(req, res, next) {
-    try {// updated once a day
-      schedule.scheduleJob('0 0 * * *', async () => {
-        const status = await module.exports.getStatus()
-        res.send({
-          statusApp: status
-        })
+    try {      
+      const status = await module.exports.getStatus()
+      res.send({
+        statusApp: status
       })
     } catch (error) {
       next(error);
@@ -360,10 +358,9 @@ module.exports = {
     }
   },
   /* Profil admin operation methods*/
-  async getProfil(req, res, next) {
+  async getOwnProfil(req, res, next) {
     try {
-      const { id } = req.params;
-      if (id != req.user.id) { throw createError.Unauthorized('access violation!') }
+      const id = req.user.id;      
       const admin = await getUser({id:id});
       res.send(admin)
     } catch (error) {
@@ -371,11 +368,10 @@ module.exports = {
     }
   },
 
-  async editProfil(req, res, next) {
+  async editOwnProfil(req, res, next) {
     try {
       const { username, email, status_civitas, keterangan } = req.body;
-      const { id } = req.params;
-      // if (id != req.user.id) { throw createError.Unauthorized('') }
+      const id = req.user.id;   
       const user = await getUser({id:id});
       if ( user.kode_role !== 1) { throw createError.Forbidden('tidak bisa diedit disini!') }
       let updateVal = {
@@ -496,14 +492,18 @@ module.exports = {
       const limits = parseInt(req.query.limit);
         let val = await paginator(Dosen, pages, limits);
         let vals = [];
-        for(let i of val.results) {// iterate over array from findall
+        if(val.results.length !== 0){
+          for(let i of val.results) {// iterate over array from findall            
             vals.push({// push only some wanted values, zellev
-                kode_dosen: i.kode_dosen,
-                NIDN: i.NIDN,
-                NIDK: i.NIDK,
-                nama_lengkap: i.nama_lengkap
-            })
-        }
+              kode_dosen: i.kode_dosen,
+              NIDN: i.NIDN,
+              NIDK: i.NIDK,
+              nama_lengkap: i.nama_lengkap
+            })    
+          }
+        } else {
+          vals.push('no record...')
+        }       
         const dosen = await Promise.all(vals);
         res.send({
             next:val.next,
@@ -696,12 +696,16 @@ module.exports = {
       const limits = parseInt(req.query.limit);
         let val = await paginator(Mahasiswa, pages, limits);
         let vals = [];
-        for(let i of val.results) {// iterate over array from findall
+        if(val.results.length !== 0){
+          for(let i of val.results) {// iterate over array from findall          
             vals.push({// push only some wanted values, zellev
-                kode_mhs: i.kode_mhs,
-                NIM: i.NIM,
-                nama_lengkap: i.nama_lengkap
+              kode_mhs: i.kode_mhs,
+              NIM: i.NIM,
+              nama_lengkap: i.nama_lengkap
             })
+          }
+        } else {
+          vals.push('no record...')
         }
         const mhs = await Promise.all(vals);
         res.send({
@@ -889,16 +893,20 @@ module.exports = {
       const limits = parseInt(req.query.limit);
         let val = await paginator(Matakuliah, pages, limits);
         let vals = [];
-        for(let i of val.results) {
-          let smstr = await i.getRefSem({
-            attributes: ['semester']
-          })
-            vals.push({
-                kode_matkul: i.kode_matkul,
-                nama_matkul: i.nama_matkul,
-                sks: i.sks,
-                semester: smstr.semester
+        if(val.results.length !== 0){
+          for(let i of val.results) {
+            let smstr = await i.getRefSem({
+              attributes: ['semester']
             })
+            vals.push({
+              kode_matkul: i.kode_matkul,
+              nama_matkul: i.nama_matkul,
+              sks: i.sks,
+              semester: smstr.semester
+            })
+          }
+        } else {
+          vals.push('no record...')
         }
         const matkul = await Promise.all(vals)
         res.send({
@@ -1175,7 +1183,7 @@ module.exports = {
         val[1] = await dosen(Dosen, pengampu.noreg_dosen2)
         val[2] = await dosen(Dosen, pengampu.noreg_dosen3)
         for(let i of val){
-          if(i != null){
+          if(i !== null){
             nidk.push(i.NIDK)
             kls.addDosen(i)
           }
@@ -1203,7 +1211,7 @@ module.exports = {
         val[1] = await dosen(Dosen, pengampu.noreg_dosen2)
         val[2] = await dosen(Dosen, pengampu.noreg_dosen3)
         for(let i of val){
-          if(i != null){
+          if(i !== null){
             nidk.push(i.NIDK)
             temp.push(i)            
           }
@@ -1230,7 +1238,7 @@ module.exports = {
       val[1] = await dosen(Dosen, pengampu.noreg_dosen2)
       val[2] = await dosen(Dosen, pengampu.noreg_dosen3)
       for(let i of val){
-        if(i != null){
+        if(i !== null){
           nidk.push(i.NIDK)
           kls.removeDosen(i)
         } else {
@@ -1267,7 +1275,7 @@ module.exports = {
         deskripsi: deskripsi
       })
       for(let i of val){
-        if(i != null){
+        if(i !== null){
           nidk.push({noreg_dosen: i.NIDK})
           kelas.addDosen(i)
         } else if (!i[0]){
@@ -1316,7 +1324,7 @@ module.exports = {
           deskripsi: row[4]
         })
         for(let i of val){
-          if(i != null){
+          if(i !== null){
             kelas.addDosen(i)
           } else if (!i[0]){
             throw createError.BadRequest(
@@ -1362,7 +1370,7 @@ module.exports = {
           where: { kode_seksi: kode_seksi }
         });
         for(let i of val){
-          if(i != null) {
+          if(i !== null) {
             temp.push(i)
           }
         }
@@ -1408,7 +1416,7 @@ module.exports = {
           updated_at: sequelize.fn('NOW')
         })
         for(let i of val){
-          if(i != null) {
+          if(i !== null) {
             temp.push(i)
           }
         }
@@ -1453,8 +1461,8 @@ module.exports = {
     try {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      const Yee = await paginator(Lupa_pw, pages, limits);
-      res.send(Yee);
+      const vals = await paginator(Lupa_pw, pages, limits);
+      res.send(vals);
     } catch (error) {
       next(error);
     }
@@ -1510,8 +1518,18 @@ module.exports = {
     try {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      const Yee = await paginator(Pengumuman, pages, limits);
-      res.send(Yee);
+      let val = await paginator(Pengumuman, pages, limits);
+      let vals = [];
+      if(val.results.length !== 0) {
+        vals.push(val.results) 
+      } else {
+        vals.push('no record...')
+      }
+      res.send({
+        next: val.next,
+        previous: val.previous,
+        pengumuman: vals
+      });
     } catch (error) {
       next(error);
     }
@@ -1520,8 +1538,8 @@ module.exports = {
   async getPengumuman(req, res, next) {
     try {
       const { kode_pengumuman } = req.params;
-      const Yee = await Pengumuman.findByPk(kode_pengumuman);
-      res.send(Yee)
+      const val = await Pengumuman.findByPk(kode_pengumuman);
+      res.send(val)
     } catch (error) {
       next(error);
     }
@@ -1600,8 +1618,19 @@ module.exports = {
     try {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      const Yee = await paginator(Captcha, pages, limits);
-      res.send(Yee);
+      let val = await paginator(Captcha, pages, limits);
+      let vals = [];
+      if(val.results.length !== 0) {
+        vals.push(val.results) 
+      } else {
+        vals.push('no record...')
+      }
+      res.send({
+        next: val.next,
+        previous: val.previous,
+        captcha: vals
+      });
+      res.send(vals);
     } catch (error) {
       next(error);
     }
@@ -1654,8 +1683,8 @@ module.exports = {
     try {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      const Yee = await paginator(Ref_semester, pages, limits);
-      res.send(Yee);
+      const vals = await paginator(Ref_semester, pages, limits);
+      res.send(vals);
     } catch (error) {
       next(error);
     }

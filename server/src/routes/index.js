@@ -14,32 +14,40 @@ const createError = require('../errorHandlers/ApiErrors');// buat 404
 
 module.exports = (app) => { // console.log(Object.keys(PutInstanceHere.__proto__)); => magic logger!
 
+    /* Contoh penggunaan Route nested:
+    *  admin/1/profil , admin/1/tambah/admin , dst
+    *  dosen/116/kelas/1912600000/paket_soal/tambah , dst
+    *  bisa disesuaikan dengan kebutuhan masing-masing element frontend
+    */
+
     /*--RUTE ADMIN--*/
-    app.use('/admin/:id', AuthControl.jwtauthAdmin, AdminRoute)
+    app.use('/admin', AuthControl.jwtauthAdmin, AdminRoute)
 
     /*--RUTE DOSEN--*/
-    app.use('/dosen/:id', AuthControl.jwtauthDosen, DosenRoute) // dengan id user
+    app.use('/dosen', AuthControl.jwtauthDosen, DosenRoute)
 
     /*--RUTE MAHASISWA--*/
-    // app.use('/mahasiswa/:id', AuthControl.jwtauthMhs, MhsRoute) // dengan id user
+    // app.use('/mahasiswa', AuthControl.jwtauthMhs, MhsRoute)
 
     /*--RUTE ALL USER NOT LOGGED IN--*/
-    app.get('/get-captcha', AuthControl.captcha);
+    app.get('/captcha', AuthControl.captcha);
     app.post('/login', Validator.formLoginCheck, Validator.loginCheck, AuthControl.login);
-    app.post('/lupa-pw', AuthControl.lupapw);
+    app.post('/lupa-pw', AuthControl.lupapw); // ke admin
+    app.post('/lupa-pw/email', AuthControl.lupapwStmp); // ke email
+    app.patch('/ubah-pw', Validator.ubahPwCheck, AuthControl.ubahPassNoauth); // no auth
 
     /*--RUTE ALL USER LOGGEDIN--*/
-    app.get('/:id/', AuthControl.jwtauthAll, AlluserControl.getProfilUser);// profil singkat u/ disidebar
-    app.patch('/:id/ubah-pw', AuthControl.jwtauthAll, Validator.ubahPwCheck, AlluserControl.ubahPass);
-    app.post('/:id/avatar/input', AuthControl.jwtauthAll, uploadPic.single('foto_profil'), AlluserControl.setAvatar);// tambah baru, atau rubah
-    app.get('/:id/semester/:kode_semester', AuthControl.jwtauthAll, AlluserControl.cariperSemester);
-    app.get('/:id/kelas', AuthControl.jwtauthAll, AlluserControl.getallKelas);
-    app.get('/:id/kelas/cari',  AuthControl.jwtauthAll, AlluserControl.cariKelas);
-    app.get('/:id/kelas/:kode_seksi', AuthControl.jwtauthAll, AlluserControl.getKelas);
-    // app.get('/:id/paket_soal/:kode_paket', AuthControl.jwtauthAll, AlluserControl.getPaketsoal); TODO: DIS!, & NODEMAILER FOR LUPAPW
-    app.get('/:id/pengumuman', AuthControl.jwtauthAll, AlluserControl.getPengumumn);
-    app.get('/:id/dosen/:kode_dosen/profil', AuthControl.jwtauthAll, DosenControl.getProfil);// karna hak akses GET profil dosen = (admin,dosen,mhs)
-    app.get('/:id/mahasiswa/:kode_mhs/profil', AuthControl.jwtauthAll, MhsControl.getProfil);// sama, hak akses GET profil mhs = (admin,dosen,mhs)
+    app.get('/profil', AuthControl.jwtauthAll, AlluserControl.getProfilUser);// profil singkat u/ disidebar
+    app.patch('/ubah-pw', AuthControl.jwtauthAll, Validator.ubahPwCheck, AlluserControl.ubahPass); //dengan auth
+    app.post('/avatar', AuthControl.jwtauthAll, uploadPic.single('foto_profil'), AlluserControl.setAvatar);// tambah baru, atau rubah
+    app.get('/semester/:kode_semester', AuthControl.jwtauthAll, AlluserControl.getperSemester);
+    app.get('/kelas', AuthControl.jwtauthAll, AlluserControl.getAllKelas);
+    app.get('/kelas/search',  AuthControl.jwtauthAll, AlluserControl.cariKelas);
+    app.get('/kelas/:kode_seksi', AuthControl.jwtauthAll, AlluserControl.getKelas);
+    app.get('/paket_soal/:kode_paket', AuthControl.jwtauthAll, AlluserControl.getPaketsoal);    
+    app.get('/dosen/:kode_dosen', AuthControl.jwtauthAll, DosenControl.getProfil);// karna hak akses GET profil dosen = (admin,dosen,mhs)
+    app.get('/mahasiswa/:kode_mhs', AuthControl.jwtauthAll, MhsControl.getProfil);// sama, hak akses GET profil mhs = (admin,dosen,mhs)
+    app.get('/pengumuman', AuthControl.jwtauthAll, AlluserControl.getPengumumn);
 
     /*--404--*/
     app.get('*',(req, res, next) => {next(createError.NotFound('404, resource tidak ditemukan...'))});

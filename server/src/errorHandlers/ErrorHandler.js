@@ -5,7 +5,7 @@ module.exports = function errorHandler (err, req, res, next) {
         return res.status(err.code)
         .send({
             success: false,
-            error:err.message
+            msg:err.message
         });
     } else {
        console.log(err)
