@@ -7,17 +7,17 @@ module.exports = (sequelize, DataTypes) => {
             autoIncrement: true,
         },
         username: { 
-            type: DataTypes.STRING(50), 
+            type: DataTypes.STRING(25), 
             unique: true,
             allowNull: false
         },
         email: { 
-            type: DataTypes.STRING(100), 
+            type: DataTypes.STRING(25), 
             unique: true,
             allowNull: false
         },
         password:{ 
-            type: DataTypes.STRING(100),
+            type: DataTypes.STRING(50),
             allowNull: false
         },
         status_civitas: { 
@@ -30,7 +30,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
         },
         foto_profil: { 
-            type: DataTypes.STRING(250)             
+            type: DataTypes.STRING(100)             
         },
         keterangan: { 
             type: DataTypes.TEXT 
@@ -45,7 +45,6 @@ module.exports = (sequelize, DataTypes) => {
          }
     }, {       
         timestamps: false,
-        paranoid: true,
         indexes:[
             {
                 name: 'archived_by_createdAt',
@@ -64,6 +63,11 @@ module.exports = (sequelize, DataTypes) => {
         User.hasOne(db.Mahasiswa, {
             foreignKey: 'id_user',
             as: 'Mahasiswa',
+            onDelete: 'CASCADE'
+        }),
+        User.hasOne(db.Token_session, {
+            foreignKey: 'id_user',
+            as: 'Token',
             onDelete: 'CASCADE'
         }),
         User.belongsTo(db.Ref_role, {

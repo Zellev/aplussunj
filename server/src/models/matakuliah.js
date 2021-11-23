@@ -13,7 +13,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER(11).UNSIGNED
         },
         nama_matkul: {
-            type: DataTypes.STRING(100),
+            type: DataTypes.STRING(25),
             allowNull: false,
             unique: true
         },
@@ -21,7 +21,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER(11).UNSIGNED
         },
         sks: {
-            type: DataTypes.INTEGER(11),
+            type: DataTypes.INTEGER(5),
             allowNull: false
         },
         deskripsi: {
@@ -29,8 +29,7 @@ module.exports = (sequelize, DataTypes) => {
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
-        paranoid: true
+        timestamps: false
     });
 
     Matkul.associate = db => {        

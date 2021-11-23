@@ -9,6 +9,7 @@ module.exports = {
         "sourceType": "module"
     },
     "rules": {
-        "no-unused-vars": ["error", { "argsIgnorePattern": "^next$|^info$|^err$|^\\.$|^Sequelize$" }]
+        "no-unused-vars": ["error", { "argsIgnorePattern": "^next$|^info$|^err$|^\\.$|^Sequelize$" }],
+        // "prettier/prettier": 2
     }
 };

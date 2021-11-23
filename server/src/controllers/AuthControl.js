@@ -1,19 +1,10 @@
-const { Captcha, User, Lupa_pw } = require('../models');
+const { Captcha, User, Lupa_pw, Token_session } = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const config = require('../config/dbconfig');
-const TIME = 60 * 60 * 24 * 7; // per-1 minggu, ganti angka paling blkng
-const { auther } = require('../helpers/global');
+const { auther, generateAccessToken, generateRefreshToken } = require('../helpers/global');
 const nodemailer = require('nodemailer');
 const sequelize = require('sequelize');
 const hbs = require('nodemailer-express-handlebars');
-
-function jwtSignuser (user) {   
-  return jwt.sign(user, config.auth.secretKey, {
-    expiresIn: TIME
-  });
-}
 
 const getUser = async obj => {
   return await User.findOne({
@@ -30,7 +21,7 @@ module.exports = {
             req.user = auth
             return next()
         } else {
-           throw createError.Unauthorized('Bukan user!')
+           throw createError.Unauthorized('Silahkan login!')
         }
     } catch (error) {
         next(error);
@@ -98,19 +89,22 @@ module.exports = {
         const { password } = req.body;
         const passwordUser = await bcrypt.compareSync(password, user.password);
         const userJson = user.toJSON();
-        // const isAdmin =  userJson.kode_role === 1 ? true : false;        
-        if (passwordUser) {
+        // const isAdmin =  userJson.kode_role === 1 ? true : false;
+        const accessToken = generateAccessToken(userJson)
+        const refreshToken = generateRefreshToken(userJson)
+        if (passwordUser) {              
+              await Token_session.create({
+                id_user: userJson.id,
+                refreshToken: refreshToken.token
+              });
               res.status(200).json({
                 success: true,
                 msg: 'Login Berhasil',
-                user_id: userJson.id,
-                username: userJson.username,
-                email: userJson.email,
                 // isAdmin: isAdmin,
-                token: jwtSignuser(userJson),// dengan string: Bearer
-                expiredIn: (TIME/86400) + ' Hari'
+                accessToken: accessToken.token,
+                refreshToken: refreshToken.token
               });
-          //     if (auth user == admin, dosen, mhs)
+          // if (auth user == admin, dosen, mhs)
           // res.redirect('/')
         } else {
           throw next(createError.BadRequest('password salah!'));

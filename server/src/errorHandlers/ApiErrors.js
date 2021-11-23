@@ -23,6 +23,10 @@ class ApiError {
     static Conflict(msg) {
       return new ApiError(409, msg);
     }
+
+    static Unprocessable(msg) {
+      return new ApiError(422, msg);
+    }
   
     static TooManyRequest(msg) {
       return new ApiError(429, msg);

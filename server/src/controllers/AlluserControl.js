@@ -3,10 +3,11 @@ const sequelize = require('sequelize');
 const jp = require('jsonpath');
 const { User, Dosen, Matakuliah, Kelas, 
         Pengumuman, Ref_semester, Ref_jenis_ujian,
-        Paket_soal } = require('../models');
+        Paket_soal, Token_session } = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
-const { paginator } = require('../helpers/global');
+const { paginator, generateAccessToken, generateRefreshToken } = require('../helpers/global');
 const { Op } = require('sequelize');
+const config = require('../config/dbconfig');
 
 const getUser = async obj => {
     return await User.findOne({
@@ -15,6 +16,39 @@ const getUser = async obj => {
 }
 
 module.exports = {
+
+  async getRefreshToken(req, res, next){
+    try {
+      const refreshToken = req.body.token;
+      let userSession = await Token_session.findOne({where:{
+        [Op.and]: [{id_user: idUser}, {refresh_token: refreshToken}]
+      }});
+      if (!refreshToken) {
+        throw createError.Unauthorized('Server error!');
+      } else if (!userSession) {
+        throw createError.Forbidden('Refresh token tidak valid!, silahkan login ulang.');
+      }
+      jwt.verify(refreshToken, config.auth.refreshTokenSecret, (err, user) => {
+        if(err){
+          console.log(err);
+          throw createError.Forbidden(err.message);
+        }
+        const newAccessToken = generateAccessToken(user);
+        const newRefreshToken = generateRefreshToken(user);
+
+        userSession = await Token_session.update({refresh_token: newRefreshToken}, {
+          where: {id_user: user.id}
+        });
+
+        res.status(200).json({
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+        });
+      });
+    } catch (error) {
+      next(error)
+    }
+  },
 
   async getProfilUser(req, res, next){
     try {
@@ -104,7 +138,7 @@ module.exports = {
         countModel: Kelas
       }
       const sms = await paginator(Ref_semester, pages, limits, opt);
-      const kelas = jp.query(sms.results[0], '$.Matkul[*].Kelas');      
+      const kelas = jp.query(sms.results[0], '$.Matkul[*].Kelas');
       for (let i of kelas.flat()){
         let matkul = await i.getMatkul()
         vals.push({
@@ -133,15 +167,14 @@ module.exports = {
         where:{kode_paket:kode_paket},
         include:{model:Ref_jenis_ujian, as:'RefJenis'}
       });
-      let status;
       if(req.user.kode_role === 1 || req.user.kode_role === 2){
         if(pkSoal.status === 'draft'){
-          status = 'DRAFT'
+          pkSoal.status = 'DRAFT'
         } else {
-          status = 'TERBIT'
+          pkSoal.status = 'TERBIT'
         }
       } else {
-        status = 'TERBIT'
+        pkSoal.status = 'TERBIT'
       }
       res.send({
         kode_paket: pkSoal.kode_paket,
@@ -151,7 +184,57 @@ module.exports = {
         waktu_mulai: pkSoal.waktu_mulai,
         durasi_ujian: pkSoal.durasi_ujian,
         bobot_total: pkSoal.bobot_total,
-        status: status
+        deskripsi: pkSoal.deskripsi,
+        created_at: pkSoal.created_at,
+        updated_at: pkSoal.updated_at,
+        status: pkSoal.status
+      })
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  async cariPaketsoal(req, res, next) {
+    try {
+      let { find } = req.query;
+      find = find.toLowerCase();
+      let pkSoal = [], temp = [];
+      const pages = parseInt(req.query.page);
+      const limits = parseInt(req.query.limit);
+      let opt = {
+        attributes: ['kode_paket', 'kode_jenis_ujian', 'jam'],
+        where: {
+          [Op.or]: [
+            {kode_seksi: {[Op.like]:'%' + find + '%'}},
+            {'$Matkul.nama_matkul$': {[Op.like]:'%' + find + '%'}},
+            {'$Dosens.nama_lengkap$': {[Op.like]:'%' + find + '%'}} 
+          ]
+        },
+        offset: (pages - 1) * limits,
+        limit: limits, // m-m array search not working with limit on
+        subQuery: false, // nested  m-m + limit search only works with this on; bc of subquery querying?/not on top level.
+        include: [
+          { model: Matakuliah, as: 'Matkul', required: true,
+            attributes: ['nama_matkul'] },
+          { model: Dosen, as: 'Dosens',
+            attributes: ['nama_lengkap'], through: {attributes:[]} }
+        ]
+      }
+      pkSoal = await paginator(Kelas, pages, limits, opt);
+      if (pkSoal.results.length === 0) {temp.push('No record...')}   
+      for (let i of pkSoal.results){          
+        temp.push({
+          kode_seksi: i.kode_seksi,
+          nama_matkul: i.Matkul.nama_matkul,
+          hari: i.hari,
+          jam: i.jam,
+          dosen_pengampu: i.Dosens
+        })
+      }
+      res.send({
+        next: pkSoal.next,
+        previous: pkSoal.previous,
+        pkSoal: temp
       })
     } catch (error) {
       next(error)

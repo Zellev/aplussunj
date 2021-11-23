@@ -3,10 +3,39 @@ const createError = require('../errorHandlers/ApiErrors')
 const Passport = require('passport');
 const pdfMake = require('pdfMake/build/pdfmake');
 const vfsFonts = require('pdfMake/build/vfs_fonts');
+const jwt = require('jsonwebtoken');
+const config = require('../config/dbconfig');
 const path = require('path');
 pdfMake.vfs = vfsFonts.pdfMake.vfs;
 
+const payload = (user) => {  
+  return {
+    id: user.id,
+    username: user.username, 
+    email: user.email
+  }  
+}
+
 module.exports = {
+
+  generateAccessToken(user) {    
+    const time = '10m'
+    const signed = jwt.sign( payload(user), config.auth.accessTokenSecret, {
+      expiresIn: time
+    });
+    return {
+      token: signed,
+      expiration: time
+    }
+  },
+  
+  generateRefreshToken(user) {    
+    const signed = jwt.sign( payload(user), config.auth.refreshTokenSecret);
+    return {
+      token: signed
+    }
+  },
+
     async paginator(model, pages, limits, options) {       
         const page = pages
         const limit = limits
@@ -48,12 +77,36 @@ module.exports = {
         }        
         return results
     },
+
+    async paginatorMN(getter, pages, limits, opt){
+        const page = pages
+        const limit = limits
+        const startIndex = (page - 1) * limit
+        const endIndex = page * limit
+
+        const results = {}
+        if (endIndex < await opt.model.count({where: opt.col})) {
+          results.next = {
+              page: page + 1,
+              limit: limit
+          }
+        }    
+        if (startIndex > 0) {
+          results.previous = {
+              page: page - 1,
+              limit: limit
+          }
+        }
+        results.results = getter
+
+      return results
+    },
   
-    async auther(req, res ,next) {       
+    async auther(req, res ,next) { 
         return new Promise((resolve, reject) => {           
             Passport.authenticate('jwt',{ session: false }, (err, user) => {
                 if (err) {
-                  reject(new Error(err))
+                  reject(new Error(err.message)) // not valid token
                 } else if (!user) {
                   reject(createError.Unauthorized('Server error!'))
                 }

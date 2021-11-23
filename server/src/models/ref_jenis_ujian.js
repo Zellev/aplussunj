@@ -7,14 +7,12 @@ module.exports = (sequelize, DataTypes) => {
             autoIncrement: true
         },
         jenis_ujian: { 
-            type: DataTypes.STRING(50),
+            type: DataTypes.STRING(25),
             allowNull: true
         },
     }, {
         freezeTableName: true,
-        timestamps: false,
-        paranoid: true
-        
+        timestamps: false        
     });
 
     Jenis_ujian.associate = db => {

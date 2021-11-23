@@ -7,14 +7,13 @@ module.exports = (sequelize, DataTypes) => {
             autoIncrement: true,
         },
         role: { 
-            type: DataTypes.STRING(50), 
+            type: DataTypes.STRING(11), 
             unique: true,
             allowNull: false
         }      
     }, {
         freezeTableName: true,
-        timestamps: false,
-        paranoid: true,       
+        timestamps: false 
     });
 
     Role.associate = db => {

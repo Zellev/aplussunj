@@ -5,7 +5,7 @@ let ExtractJwt = passportJWT.ExtractJwt;
 let JwtStrategy = passportJWT.Strategy;
 let jwtOptions = {
     jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-    secretOrKey: config.auth.secretKey
+    secretOrKey: config.auth.accessTokenSecret
 };
 const getUser = obj => {
     return User.findOne({

@@ -7,15 +7,13 @@ module.exports = (sequelize, DataTypes) => {
             autoIncrement: true
         },
         kelompok_matakuliah: { 
-            type: DataTypes.STRING(50),
+            type: DataTypes.STRING(25),
             allowNull: false,
             unique:true
         },
     }, {
         freezeTableName: true,
-        timestamps: false,
-        paranoid: true
-        
+        timestamps: false        
     });
 
     Kel_matkul.associate = db => {

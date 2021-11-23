@@ -7,14 +7,13 @@ module.exports = (sequelize, DataTypes) => {
             autoIncrement: true
         },
         semester: { 
-            type: DataTypes.STRING(50),
+            type: DataTypes.STRING(5),
             allowNull: true,
             unique:true
         },
     }, {
         freezeTableName: true,
-        timestamps: false,
-        paranoid: true
+        timestamps: false
     });
 
     Semester.associate = db => {

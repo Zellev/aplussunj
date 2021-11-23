@@ -10,29 +10,29 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         NIP: { 
-            type: DataTypes.STRING(30), 
+            type: DataTypes.STRING(20), 
             unique: true,
             allowNull: false
         },
         NIDN: { 
-            type: DataTypes.STRING(30), 
+            type: DataTypes.STRING(11), 
             unique: true,
             allowNull: true
         },
         NIDK: { 
-            type: DataTypes.STRING(30), 
+            type: DataTypes.STRING(11), 
             unique: true,
             allowNull: false
         },
         nama_lengkap:{ 
-            type: DataTypes.STRING(100),
+            type: DataTypes.STRING(25),
             allowNull: false
         },
         alamat: { 
             type: DataTypes.TEXT
         },
         nomor_telp: { 
-            type: DataTypes.STRING(50),
+            type: DataTypes.STRING(12),
             allowNull: false
         },
         created_at: { 
@@ -46,7 +46,6 @@ module.exports = (sequelize, DataTypes) => {
     }, {
         freezeTableName: true,
         timestamps: false,
-        paranoid: true,
         indexes:[
             {
                 name: 'archived_by_createdAt',

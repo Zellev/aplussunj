@@ -1,4 +1,4 @@
-require('dotenv').config({path:__dirname+'/./../../dbsettings.env'});
+require('dotenv').config({path:__dirname+'/./../../.env'});
 
 module.exports = {
     port: process.env.PORT,
@@ -19,7 +19,8 @@ module.exports = {
         }
     },
     auth: {
-        secretKey: process.env.SECRET_KEY,
+        accessTokenSecret: process.env.ACCESS_TOKEN_SECRET,
+        refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
         defaultPass: process.env.DEFAULT_PASS
     }
 }

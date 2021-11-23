@@ -10,7 +10,7 @@ module.exports = (sequelize, DataTypes) => { //TODO DIS
             allowNull: true
         },
         judul_ujian: {
-            type: DataTypes.STRING(100),
+            type: DataTypes.STRING(25),
             allowNull: false
         },
         tanggal_mulai: {
@@ -26,7 +26,7 @@ module.exports = (sequelize, DataTypes) => { //TODO DIS
             allowNull: false
         },
         bobot_total: {
-            type: DataTypes.INTEGER(11).UNSIGNED,
+            type: DataTypes.INTEGER(5).UNSIGNED,
             allowNull: false
         },
         status: {
@@ -47,7 +47,6 @@ module.exports = (sequelize, DataTypes) => { //TODO DIS
     }, {
         freezeTableName: true,
         timestamps: false,
-        paranoid: true,
         indexes:[
             {
                 name: 'archived_by_createdAt',

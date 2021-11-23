@@ -552,7 +552,7 @@ module.exports = {
       if (req.file == undefined) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename)
+      const excelFile = xlsxPath(req.file.filename);
       const wb = xlsx.readFile(excelFile);
       let ws = {};
       for (const sheetName of wb.SheetNames) {          

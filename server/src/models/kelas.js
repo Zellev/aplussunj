@@ -1,7 +1,7 @@
 module.exports = (sequelize, DataTypes) => {
     const Kelas = sequelize.define('Kelas', {
         kode_seksi: { 
-            type: DataTypes.INTEGER(20).UNSIGNED,
+            type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
             primaryKey: true
         },
@@ -14,7 +14,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         jam: {
-            type: DataTypes.STRING(25),
+            type: DataTypes.STRING(15),
             allowNull: false
         },
         deskripsi: {
@@ -22,8 +22,7 @@ module.exports = (sequelize, DataTypes) => {
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
-        paranoid: true,
+        timestamps: false
     });
 
     Kelas.associate = db => {        

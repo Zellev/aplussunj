@@ -8,7 +8,8 @@ module.exports = function errorHandler (err, req, res, next) {
             msg:err.message
         });
     } else {
-       console.log(err)
+        console.log(err) // dev
+        // console.log(err.message) prod
        res.status(500).json({error: 'something went wrong on our side...'});
     }
 }

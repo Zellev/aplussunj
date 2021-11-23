@@ -6,14 +6,13 @@ module.exports = (sequelize, DataTypes) => {
             autoIncrement: true
         },
         peminatan: { 
-            type: DataTypes.STRING(100),
+            type: DataTypes.STRING(25),
             allowNull: true,
             unique:true
         },
     }, {
         freezeTableName: true,
-        timestamps: false,
-        paranoid: true
+        timestamps: false
     });
 
     Peminatan.associate = db => {

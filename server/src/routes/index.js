@@ -37,17 +37,21 @@ module.exports = (app) => { // console.log(Object.keys(PutInstanceHere.__proto__
     app.patch('/ubah-pw', Validator.ubahPwCheck, AuthControl.ubahPassNoauth); // no auth
 
     /*--RUTE ALL USER LOGGEDIN--*/
-    app.get('/profil', AuthControl.jwtauthAll, AlluserControl.getProfilUser);// profil singkat u/ disidebar
-    app.patch('/ubah-pw', AuthControl.jwtauthAll, Validator.ubahPwCheck, AlluserControl.ubahPass); //dengan auth
+    app.post('/refresh-token', AlluserControl.getRefreshToken);// refresh access dan refresh token
+    app.delete('/logout', AuthControl.jwtauthAll, AlluserControl.deleteTokenSession);    
+    app.patch('/ubah-pw', AuthControl.jwtauthAll, Validator.ubahPwCheck, AlluserControl.ubahPass); // dengan auth
     app.post('/avatar', AuthControl.jwtauthAll, uploadPic.single('foto_profil'), AlluserControl.setAvatar);// tambah baru, atau rubah
+    app.get('/profil', AuthControl.jwtauthAll, AlluserControl.getProfilUser);// profil singkat u/ disidebar
     app.get('/semester/:kode_semester', AuthControl.jwtauthAll, AlluserControl.getperSemester);
     app.get('/kelas', AuthControl.jwtauthAll, AlluserControl.getAllKelas);
     app.get('/kelas/search',  AuthControl.jwtauthAll, AlluserControl.cariKelas);
     app.get('/kelas/:kode_seksi', AuthControl.jwtauthAll, AlluserControl.getKelas);
-    app.get('/paket_soal/:kode_paket', AuthControl.jwtauthAll, AlluserControl.getPaketsoal);    
-    app.get('/dosen/:kode_dosen', AuthControl.jwtauthAll, DosenControl.getProfil);// karna hak akses GET profil dosen = (admin,dosen,mhs)
-    app.get('/mahasiswa/:kode_mhs', AuthControl.jwtauthAll, MhsControl.getProfil);// sama, hak akses GET profil mhs = (admin,dosen,mhs)
+    app.get('/paket-soal/:kode_paket', AuthControl.jwtauthAll, AlluserControl.getPaketsoal);
+    app.get('/paket_soal/search', AuthControl.jwtauthAll, AlluserControl.cariPaketsoal); 
+    app.get('/dosen/:kode_dosen', AuthControl.jwtauthAll, DosenControl.getProfil);
+    app.get('/mahasiswa/:kode_mhs', AuthControl.jwtauthAll, MhsControl.getProfil);
     app.get('/pengumuman', AuthControl.jwtauthAll, AlluserControl.getPengumumn);
+    
 
     /*--404--*/
     app.get('*',(req, res, next) => {next(createError.NotFound('404, resource tidak ditemukan...'))});

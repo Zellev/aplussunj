@@ -1,8 +1,9 @@
 const { Dosen, Kelas, Paket_soal, Ref_jenis_ujian, 
-        Rel_kelas_paketsoal } = require('../models')
-const sequelize = require('sequelize')
+        Rel_kelas_paketsoal } = require('../models');
+const sequelize = require('sequelize');
+const jp = require('jsonpath');
 const createError = require('../errorHandlers/ApiErrors');
-const { createKode } = require('../helpers/global');
+const { createKode, paginator } = require('../helpers/global');
 const { format } = require('date-fns');
 
 module.exports = {
@@ -62,7 +63,8 @@ module.exports = {
     try {
       const kdPaket = createKode(5)
       const kdSeksi = req.body.kode_seksi
-      const { judul_ujian, jenis_ujian, tanggal_mulai, waktu_mulai, durasi_ujian, bobot_total, deskripsi } = req.body     
+      const { judul_ujian, jenis_ujian, tanggal_mulai, 
+        waktu_mulai, durasi_ujian, bobot_total, deskripsi } = req.body     
       const refJenis = await Ref_jenis_ujian.findOne({where:{jenis_ujian:jenis_ujian}})
       const date = format(new Date(String(tanggal_mulai)), 'yyyy-MM-dd')
       const pkCheck = await Paket_soal.findAll({
@@ -75,7 +77,7 @@ module.exports = {
         kosek = kosek.map(({kode_seksi}) => kode_seksi)
         throw createError.Conflict(`waktu mulai ujian ${waktu_mulai} pada kelas ini
               bentrok dengan kelas ${kosek}`)
-      }      
+      }
       await Paket_soal.create({
         kode_paket: kdPaket,
         judul_ujian: judul_ujian,
@@ -110,27 +112,45 @@ module.exports = {
     try {
       //TODO: get all paket soal of a dosen regardless of class
       //      like an archive feature for paket soals
-      // const pages = parseInt(req.query.page);
-      // const limits = parseInt(req.query.limit);
-      // const user = req.user
-      // let opt = {
-      //   where: {id_user: user.id},
-      //   offset: (pages - 1) * limits,
-      //   limit: limits,
-      //   include: {
-      //     model: Kelas, as: 'Kelases',
-      //     include: {
-      //       model: Paket_soal, as: 'PaketSoals'
-      //     }
-      //   }
-      // }
-      // let pkSoal = await paginator(Dosen, pages, limits, opt);
-      // if (pkSoal.results.length === 0) {temp.push('No Record...')}
-      // res.send({
-      //     next: val.next,
-      //     previous: val.previous,
-      //     kelas: kelas
-      // });
+      const pages = parseInt(req.query.page);
+      const limits = parseInt(req.query.limit);
+      const user = req.user
+      let opt = {
+        where: {id_user: user.id},        
+        include: {
+          model: Kelas, as: 'Kelases',
+          include: {
+            model: Paket_soal, as: 'PaketSoals',
+            through: {attributes:[]}
+          }
+        },
+        countModel: Paket_soal
+      }, vals = [];
+      const dosen = await paginator(Dosen, pages, limits, opt);
+      const pkSoal = jp.query(dosen.results[0], '$.Kelases[*].PaketSoals');
+      for (let i of pkSoal.flat()){
+        if(i.status === 'draft'){
+          i.status = 'DRAFT'
+        } else {
+          i.status = 'TERBIT'
+        }
+        let refJenis = await i.getRefJenis()
+        vals.push({
+          kode_paket: i.kode_paket,
+          jenis_ujian: refJenis.jenis_ujian,
+          judul_ujian: i.judul_ujian,
+          tanggal_mulai: i.tanggal_mulai,
+          waktu_mulai: i.waktu_mulai,
+          bobot_total: i.bobot_total,
+          status: i.status
+        })
+      }
+      if (vals.length === 0) {vals.push('No Record...')}
+      res.send({
+          next: dosen.next,
+          previous: dosen.previous,
+          paket_soal: vals
+      });
     } catch (error) {
       next(error)
     }
