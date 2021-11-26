@@ -5,8 +5,9 @@ const { User, Dosen, Matakuliah, Kelas,
         Pengumuman, Ref_semester, Ref_jenis_ujian,
         Paket_soal, Token_session } = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
-const { paginator, generateAccessToken, generateRefreshToken } = require('../helpers/global');
+const { paginator, generateAccessToken, /*generateRefreshToken*/ } = require('../helpers/global');
 const { Op } = require('sequelize');
+const jwt = require('jsonwebtoken');
 const config = require('../config/dbconfig');
 
 const getUser = async obj => {
@@ -19,34 +20,56 @@ module.exports = {
 
   async getRefreshToken(req, res, next){
     try {
-      const refreshToken = req.body.token;
-      let userSession = await Token_session.findOne({where:{
-        [Op.and]: [{id_user: idUser}, {refresh_token: refreshToken}]
-      }});
+      const refreshToken = req.body.token; //from database?
+      const userSession = await Token_session.findOne({
+        where:{refresh_token: refreshToken}
+      });
       if (!refreshToken) {
         throw createError.Unauthorized('Server error!');
       } else if (!userSession) {
         throw createError.Forbidden('Refresh token tidak valid!, silahkan login ulang.');
       }
-      jwt.verify(refreshToken, config.auth.refreshTokenSecret, (err, user) => {
+      jwt.verify(refreshToken, config.auth.refreshTokenSecret, async (err, user) => {
         if(err){
           console.log(err);
           throw createError.Forbidden(err.message);
         }
         const newAccessToken = generateAccessToken(user);
-        const newRefreshToken = generateRefreshToken(user);
+        // const newRefreshToken = generateRefreshToken(user);
 
-        userSession = await Token_session.update({refresh_token: newRefreshToken}, {
-          where: {id_user: user.id}
-        });
+        // await Token_session.update({refresh_token: newRefreshToken.token}, {
+        //   where: {id_user: user.id}
+        // }); FOR PRODUCTION ONLY!
 
         res.status(200).json({
           accessToken: newAccessToken,
-          refreshToken: newRefreshToken,
+          // refreshToken: newRefreshToken
         });
       });
     } catch (error) {
       next(error)
+    }
+  },
+
+  async deleteTokenSession(req, res, next){
+    try {
+      const refreshToken = req.body.token;
+      const { id } = req.user;
+      const userSession = await Token_session.findOne({
+        where:{refresh_token: refreshToken}
+      });
+      if (!refreshToken) {
+        throw createError.Unauthorized('Server error!');
+      } else if (!userSession) {
+        throw createError.Forbidden('Sesi user tidak ditemukan!');
+      }
+      await Token_session.destroy({
+        where:{[Op.and]:
+          [{id_user:id},{refresh_token: refreshToken}]          
+      }});
+      res.sendStatus(204);
+    } catch (error) {
+      next(error)  
     }
   },
 
@@ -73,8 +96,7 @@ module.exports = {
         let user = await getUser({ id: id });
         const { email } = user;
         let password = current_password;
-        const passwordUser = await bcrypt.compareSync(password, user.password);
-  
+        const passwordUser = await bcrypt.compare(password, user.password);  
         if (passwordUser) {
           if(new_password == confirm_password){
             const hashed = await bcrypt.hash(new_password, 10)
@@ -102,7 +124,7 @@ module.exports = {
   async setAvatar(req, res, next) {
     try {
         const file = req.file.filename;
-        const { id } = req.params;
+        const { id } = req.user;
         let updateVal = { foto_profil: file, updated_at: sequelize.fn('NOW')};
         await User.update(updateVal,{
             where: { id: id }

@@ -87,29 +87,28 @@ module.exports = {
     try {
         let user = req.user;
         const { password } = req.body;
-        const passwordUser = await bcrypt.compareSync(password, user.password);
+        const passwordUser =  await bcrypt.compare(password, user.password);
         const userJson = user.toJSON();
         // const isAdmin =  userJson.kode_role === 1 ? true : false;
-        const accessToken = generateAccessToken(userJson)
-        const refreshToken = generateRefreshToken(userJson)
-        if (passwordUser) {              
-              await Token_session.create({
-                id_user: userJson.id,
-                refreshToken: refreshToken.token
-              });
-              res.status(200).json({
-                success: true,
-                msg: 'Login Berhasil',
-                // isAdmin: isAdmin,
-                accessToken: accessToken.token,
-                refreshToken: refreshToken.token
-              });
-          // if (auth user == admin, dosen, mhs)
-          // res.redirect('/')
+        const accessToken = generateAccessToken(userJson);
+        const refreshToken = generateRefreshToken(userJson);
+        if (passwordUser) {
+          await Token_session.create({
+            id_user: userJson.id,
+            refresh_token: refreshToken.token
+          });
+          res.status(200).json({
+            success: true,
+            msg: 'Login Berhasil',
+            // isAdmin: isAdmin,
+            accessToken: accessToken.token,
+            refreshToken: refreshToken.token
+          });
+        // res.redirect('/')
         } else {
           throw next(createError.BadRequest('password salah!'));
         }            
-    } catch (error) {      
+    } catch (error) {
       next(error);
     }
   },

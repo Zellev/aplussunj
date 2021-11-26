@@ -37,8 +37,8 @@ module.exports = (app) => { // console.log(Object.keys(PutInstanceHere.__proto__
     app.patch('/ubah-pw', Validator.ubahPwCheck, AuthControl.ubahPassNoauth); // no auth
 
     /*--RUTE ALL USER LOGGEDIN--*/
-    app.post('/refresh-token', AlluserControl.getRefreshToken);// refresh access dan refresh token
-    app.delete('/logout', AuthControl.jwtauthAll, AlluserControl.deleteTokenSession);    
+    app.post('/refresh-token', AlluserControl.getRefreshToken);// perbarui access token dan refresh token
+    app.delete('/logout', AuthControl.jwtauthAll, AlluserControl.deleteTokenSession);
     app.patch('/ubah-pw', AuthControl.jwtauthAll, Validator.ubahPwCheck, AlluserControl.ubahPass); // dengan auth
     app.post('/avatar', AuthControl.jwtauthAll, uploadPic.single('foto_profil'), AlluserControl.setAvatar);// tambah baru, atau rubah
     app.get('/profil', AuthControl.jwtauthAll, AlluserControl.getProfilUser);// profil singkat u/ disidebar

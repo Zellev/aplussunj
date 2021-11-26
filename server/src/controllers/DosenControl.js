@@ -17,22 +17,33 @@ module.exports = {
       * 
       */
       const user = req.user;
+      // const test = await user.getDosen({
+      //   include: 
+      //     { model: Kelas, as: 'Kelases'}
+      // })
       const kelas = await user.getDosen({
-        include: [
-          { model: Kelas, as: 'Kelases', required: true,
+        include: {
+          model: Kelas, as: 'Kelases', required: true,
           through: {attributes:[]}, 
           include: {
-            model: Paket_soal, as: 'PaketSoals',
+            model: Paket_soal, as: 'PaketSoals', required: false,
             where: {status:'draft'}, attributes:{
-              exclude:['durasi_ujian','status','deskripsi','created_at','updated_at']
+              exclude:['durasi_ujian','deskripsi','created_at','updated_at']
             },
             through: {attributes:[]}
-          } }
-        ]
+          }
+        }        
       });
-      res.send({        
-        kelas: kelas.Kelases,
-        paket_soal: kelas.PaketSoals
+      const kelasJson = kelas.toJSON();
+      const kelasDosen = kelasJson.Kelases.map((o) => {
+        let{PaketSoals, ...f} = o; // eslint-disable-line
+        return f
+      })
+      const pkSoal = jp.query(kelasJson, '$.Kelases[*].PaketSoals');
+      // console.log(kelasDosen.toJSON())      
+      res.send({
+        kelas: kelasDosen,
+        paket_soal_draft: pkSoal
       });
     } catch (error) {
       next(error);
@@ -63,8 +74,8 @@ module.exports = {
     try {
       const kdPaket = createKode(5)
       const kdSeksi = req.body.kode_seksi
-      const { judul_ujian, jenis_ujian, tanggal_mulai, 
-        waktu_mulai, durasi_ujian, bobot_total, deskripsi } = req.body     
+      const { judul_ujian, jenis_ujian, tanggal_mulai, waktu_mulai, 
+              durasi_ujian, bobot_total, deskripsi } = req.body     
       const refJenis = await Ref_jenis_ujian.findOne({where:{jenis_ujian:jenis_ujian}})
       const date = format(new Date(String(tanggal_mulai)), 'yyyy-MM-dd')
       const pkCheck = await Paket_soal.findAll({
@@ -151,6 +162,34 @@ module.exports = {
           previous: dosen.previous,
           paket_soal: vals
       });
+    } catch (error) {
+      next(error)
+    }
+  },
+
+  async editPaketsoal(req, res, next){
+    try {
+      const { jenis_ujian, judul_ujian, tanggal_mulai, waktu_mulai,
+              durasi_ujian, bobot_total, status, deskripsi } = req.body;
+      const id = req.user.id;   
+      const user = await getUser({id:id});
+      if ( user.kode_role !== 1) { throw createError.Forbidden('tidak bisa diedit disini!') }
+      let updateVal = {
+        username: username,
+        email: email,
+        status_civitas: status_civitas,
+        keterangan: keterangan,
+        updated_at: sequelize.fn('NOW')
+      };
+
+      await User.update(updateVal, {
+        where: { id: user.id }
+      });
+
+      res.status(200).json({
+        success: true,
+        msg: 'profil '+ user.username +' berhasil diedit'
+      })
     } catch (error) {
       next(error)
     }

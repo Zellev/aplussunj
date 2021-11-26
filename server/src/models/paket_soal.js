@@ -1,4 +1,4 @@
-module.exports = (sequelize, DataTypes) => { //TODO DIS
+module.exports = (sequelize, DataTypes) => { 
     const Paket_soal = sequelize.define('Paket_soal', {
         kode_paket: { 
             type: DataTypes.STRING(11),
@@ -22,8 +22,7 @@ module.exports = (sequelize, DataTypes) => { //TODO DIS
             allowNull: false
         },
         durasi_ujian: {
-            type: DataTypes.TIME,
-            allowNull: false
+            type: DataTypes.TIME
         },
         bobot_total: {
             type: DataTypes.INTEGER(5).UNSIGNED,
