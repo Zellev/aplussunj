@@ -10,7 +10,7 @@ const app = express();
 require('./config/passport')(passport);
 app.use(passport.initialize());
 app.use(express.static('./public'));
-app.use(morgan('combined'));// dev
+app.use(morgan('combined'));/* dev */
 app.use(express.json({limit: '10mb', extended: true}));
 app.use(express.urlencoded({limit: '10mb', extended: false}));// true
 app.use(cors())
