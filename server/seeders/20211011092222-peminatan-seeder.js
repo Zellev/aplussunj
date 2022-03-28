@@ -4,6 +4,9 @@ module.exports = {
   up: async (queryInterface, Sequelize) => {
     return queryInterface.bulkInsert('Ref_peminatan',[
       {
+        peminatan: null
+      },
+      {
         peminatan: 'Multimedia'
       },
       {
@@ -11,10 +14,7 @@ module.exports = {
       }, 
       {
         peminatan: 'Teknik Komputer Jaringan'
-      },
-      {
-        peminatan: null
-      }, 
+      },       
     ]);
   },
 

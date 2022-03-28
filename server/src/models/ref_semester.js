@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
     const Semester = sequelize.define('Ref_semester', {
-        kode_semester: { 
+        id_semester: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
             primaryKey: true, 
@@ -17,10 +17,10 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     Semester.associate = db => {
-        Semester.hasMany(db.Matakuliah, {
-            foreignKey: 'semester',
+        Semester.hasMany(db.Kelas, {
+            foreignKey: 'id_semester',
             onDelete: 'CASCADE',
-            as: 'Matkul'
+            as: 'Kelas'
         })
     };
 

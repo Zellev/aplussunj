@@ -7,7 +7,7 @@ module.exports = {
         kelompok_matakuliah: 'Wajib'
       },
       {
-        kelompok_matakuliah: 'Peminatan'
+        kelompok_matakuliah: 'Pilihan'
       },
       {
         kelompok_matakuliah: 'MKU'

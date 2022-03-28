@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>status printer</title>
+    <style type="text/css" rel="stylesheet" media="all"> 
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial;
+      font-size: 12px;
+      line-height: 20px;
+      font-weight: 400;
+      color: black;
+      -webkit-font-smoothing: antialiased;
+    }
+    @media screen and (max-width: 580px) {
+      body {
+        font-size: 16px;
+      }
+    }
+
+    .wrapper {
+      padding: 30px;
+      line-height: 20px;
+      min-height: 900px;
+    }
+
+    .kopsurat {
+      width: 100%;
+      display: flex;
+      overflow: auto;
+      min-width: auto;
+      align-items: center;
+      flex-direction: column;
+    }
+
+    .table {
+      margin: 45px 0 5px 0;
+      width: 100%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      display: table;
+    }
+    @media screen and (max-width: 580px) {
+      .table {
+          display: block;
+      }
+    }
+
+    .row {
+      display: table-row;
+      background: #f6f6f6;
+    }
+    .row:nth-of-type(odd) {
+      background: #e9e9e9;
+    }
+    .row.header {
+      font-weight: bolder;
+      color: #ffffff;
+      background: #ea6153;
+    }
+    .row.green {
+      background: #27ae60;
+    }
+    .row.blue {
+      background: #2980b9;
+    }
+    @media screen and (max-width: 580px) {
+    .row {
+        padding: 14px 0 7px;
+        display: block;
+    }
+    .row.header {
+        padding: 0;
+        height: 6px;
+    }
+    .row.header .cell {
+        display: none;
+    }
+    .row .cell {
+        margin-bottom: 10px;
+    }
+    .row .cell:before {
+        margin-bottom: 3px;
+        content: attr(data-title);
+        min-width: 98px;
+        font-size: 10px;
+        line-height: 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        color: #969696;
+        display: block;
+    }
+    }
+
+    .cell{
+      padding-top: 5px;
+      padding-bottom: 5px;
+      padding-left: 5px;
+      display: table-cell;
+    }
+
+    .cell.header {
+      text-align: center;
+    }
+
+    @media screen and (max-width: 580px) {
+    .cell {
+        padding: 2px 16px;
+        display: block;
+    }
+    }
+    </style>
+</head>
+
+<body>
+  <div class="wrapper">
+      <img src="{{kop_surat}}" class="kopsurat">       
+        <table class="table">
+          <thead>
+            <tr class="row header blue">
+              <td class="cell header">Total User</td>
+              <td class="cell header">Total User Online</td>
+              <td class="cell header">Jumlah Admin</td>
+              <td class="cell header">Jumlah Dosen</td>
+              <td class="cell header">Jumlah Mahasiswa</td>
+              <td class="cell header">Jumlah Matakuliah</td>
+              <td class="cell header">Total Kelas</td>
+              <td class="cell header">Total Ujian dibuat</td>
+            </tr>
+          </thead>
+          <tbody>
+            {{#data}}
+              <tr class="row">
+                <td class="cell">{{total_users}}</td>
+                <td class="cell">{{total_online_users}}</td>
+                <td class="cell">{{jumlah_admin}}</td>
+                <td class="cell">{{jumlah_dosen}}</td>
+                <td class="cell">{{jumlah_mhs}}</td>
+                <td class="cell">{{total_matakuliah}}</td>
+                <td class="cell">{{total_kelas}}</td>
+                <td class="cell">{{total_ujian}}</td>
+              </tr>
+            {{/data}}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="8"><hr></td>
+            </tr>
+            <tr>              
+              <td colspan="8"><i>tertanggal, {{tanggal}}</i></td>
+            </tr>
+          </tfoot>
+        </table>        
+      <script type="text/javascript">
+    
+      </script>
+  </div>
+</body>
+</html>

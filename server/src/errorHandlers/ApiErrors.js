@@ -24,6 +24,14 @@ class ApiError {
       return new ApiError(409, msg);
     }
 
+    static TooLarge(msg) {
+      return new ApiError(415, msg);
+    }
+
+    static Unsupported(msg) {
+      return new ApiError(415, msg);
+    }
+
     static Unprocessable(msg) {
       return new ApiError(422, msg);
     }

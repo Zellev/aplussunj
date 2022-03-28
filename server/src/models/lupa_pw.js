@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
     const Lupa_pw = sequelize.define("Lupa_pw", {
-        kode_reset_pw: { 
+        id_reset_pw: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
             primaryKey: true, 
@@ -15,7 +15,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         status: { 
-            type: DataTypes.ENUM('sudah', 'belum') 
+            type: DataTypes.ENUM('sudah', 'belum')
         }
     }, {
         freezeTableName: true,

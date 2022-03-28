@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
     const Mahasiswa = sequelize.define('Mahasiswa', {
-        kode_mhs: { 
+        id_mhs: { 
             type: DataTypes.INTEGER(11).UNSIGNED, 
             allowNull: false,
             primaryKey: true, 
@@ -11,7 +11,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         NIM: { 
-            type: DataTypes.STRING(11), 
+            type: DataTypes.STRING(10), 
             unique: true,
             allowNull: false
         },
@@ -50,7 +50,29 @@ module.exports = (sequelize, DataTypes) => {
         Mahasiswa.belongsTo(db.User, { 
             foreignKey: 'id_user',
             as: 'User'
-        });
+        }),
+        Mahasiswa.belongsToMany(db.Kelas, {
+            through: 'Rel_mahasiswa_kelas',
+            foreignKey: 'id_mhs',
+            onDelete: 'CASCADE',
+            as: 'Kelases'
+        }),
+        Mahasiswa.belongsToMany(db.Paket_soal, {
+            through: 'Rel_mahasiswa_paketsoal',
+            foreignKey: 'id_mhs',
+            onDelete: 'CASCADE',
+            as: 'PaketSoals'
+        }),
+        Mahasiswa.hasMany(db.Rel_mahasiswa_paketsoal, {
+            foreignKey: 'id_mhs',
+            onDelete: 'CASCADE',
+            as: 'Mahasiswa_pksoal'
+        }),
+        Mahasiswa.hasMany(db.Jawaban_mahasiswa, {
+            foreignKey: 'id_mhs',
+            onDelete: 'CASCADE',
+            as: 'Jawabans'
+        })
     }
 
     return Mahasiswa;

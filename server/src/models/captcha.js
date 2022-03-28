@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
     const Captcha = sequelize.define('Captcha', {
-        kode_captcha: { 
+        id_captcha: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
             primaryKey: true, 

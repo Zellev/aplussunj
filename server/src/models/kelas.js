@@ -1,13 +1,22 @@
 module.exports = (sequelize, DataTypes) => {
     const Kelas = sequelize.define('Kelas', {
-        kode_seksi: { 
+        id_kelas: {
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
-            primaryKey: true
+            primaryKey: true,
+            autoIncrement: true
         },
-        kode_matkul: {
+        kode_seksi: { 
+            type: DataTypes.STRING(10),
+            unique: true,
+            allowNull: false
+        },
+        id_matkul: {
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false
+        },
+        id_semester: {
+            type: DataTypes.INTEGER(11).UNSIGNED
         },
         hari: {
             type: DataTypes.STRING(10),
@@ -18,7 +27,8 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         deskripsi: {
-            type: DataTypes.TEXT
+            type: DataTypes.TEXT,
+            defaultValue: null
         }
     }, {
         freezeTableName: true,
@@ -27,22 +37,35 @@ module.exports = (sequelize, DataTypes) => {
 
     Kelas.associate = db => {        
         Kelas.belongsTo(db.Matakuliah, {
-            foreignKey: 'kode_matkul',
+            foreignKey: 'id_matkul',
             as: 'Matkul'
+        }),        
+        Kelas.belongsTo(db.Ref_semester, {
+            foreignKey: 'id_semester',
+            as: 'RefSem'
         }),
-        Kelas.belongsToMany(db.Paket_soal, {
-            through: 'Rel_kelas_paketsoal',
-            foreignKey: 'kode_seksi',
-            as: 'PaketSoals'
+        Kelas.belongsToMany(db.Ujian, {
+            through: 'Rel_kelas_ujian',
+            foreignKey: 'id_kelas',
+            onDelete: 'CASCADE',
+            as: 'Ujians'
         }),
-        Kelas.hasMany(db.Rel_kelas_paketsoal, {
-            foreignKey: 'kode_seksi',
+        Kelas.hasMany(db.Rel_kelas_ujian, {
+            foreignKey: 'id_kelas',
+            onDelete: 'CASCADE',
             as: 'KelasOccurance'
         }),
         Kelas.belongsToMany(db.Dosen, {
             through: 'Rel_dosen_kelas',
-            foreignKey: 'kode_seksi',
+            foreignKey: 'id_kelas',
+            onDelete: 'CASCADE',
             as: 'Dosens'
+        }),
+        Kelas.belongsToMany(db.Mahasiswa, {
+            through: 'Rel_mahasiswa_kelas',
+            foreignKey: 'id_kelas',
+            onDelete: 'CASCADE',
+            as: 'Mahasiswas'
         })
     };
 

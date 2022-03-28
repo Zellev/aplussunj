@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
     const Pengumuman = sequelize.define('Pengumuman', {
-        kode_pengumuman: { 
+        id_pengumuman: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
             primaryKey: true, 

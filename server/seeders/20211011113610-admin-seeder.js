@@ -8,8 +8,8 @@ module.exports = {
   up: async (queryInterface, Sequelize) => {
     return queryInterface.bulkInsert('Users',[
       {
-        username: 'test',
-        email: 'test@gmail.com',
+        username: 'admin',
+        email: 'admin@gmail.com',
         password: pass(), // liat di.ENV
         status_civitas: 'aktif',
         kode_role: '1',

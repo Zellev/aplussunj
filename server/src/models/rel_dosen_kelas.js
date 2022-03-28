@@ -6,11 +6,11 @@ module.exports = (sequelize, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
-        kode_dosen: { 
+        id_dosen: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false
         },
-        kode_seksi: { 
+        id_kelas: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false
         }

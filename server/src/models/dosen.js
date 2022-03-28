@@ -1,9 +1,10 @@
 module.exports = (sequelize, DataTypes) => { 
     const Dosen = sequelize.define('Dosen', {
-        kode_dosen: { 
+        id_dosen: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
-            primaryKey: true, 
-            autoIncrement: true,
+            primaryKey: true,
+            allowNull: false,
+            autoIncrement: true            
         },
         id_user: { 
             type: DataTypes.INTEGER(11).UNSIGNED,            
@@ -15,12 +16,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         NIDN: { 
-            type: DataTypes.STRING(11), 
-            unique: true,
-            allowNull: true
+            type: DataTypes.STRING(10), 
+            unique: true
         },
         NIDK: { 
-            type: DataTypes.STRING(11), 
+            type: DataTypes.STRING(10), 
             unique: true,
             allowNull: false
         },
@@ -29,7 +29,8 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         alamat: { 
-            type: DataTypes.TEXT
+            type: DataTypes.TEXT,
+            defaultValue: null
         },
         nomor_telp: { 
             type: DataTypes.STRING(12),
@@ -61,9 +62,15 @@ module.exports = (sequelize, DataTypes) => {
             as: 'User' 
         }),
         Dosen.belongsToMany(db.Kelas, {
-            through: 'Rel_dosen_kelas',
-            foreignKey: 'kode_dosen',
+            through: 'Rel_dosen_kelas',            
+            foreignKey: 'id_dosen',
+            onDelete: 'CASCADE',
             as: 'Kelases'
+        }),
+        Dosen.hasMany(db.Soal_essay, {
+            foreignKey: 'id_soal',
+            onDelete: 'CASCADE',
+            as: 'Soals'
         })
     }
 

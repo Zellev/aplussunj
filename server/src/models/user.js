@@ -25,24 +25,26 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: 'aktif',
             allowNull: false
         },
-        kode_role: { 
+        id_role: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
         },
         foto_profil: { 
-            type: DataTypes.STRING(100)             
+            type: DataTypes.STRING(100),
+            defaultValue: null
         },
         keterangan: { 
-            type: DataTypes.TEXT 
+            type: DataTypes.TEXT,
+            defaultValue: null
         },
         created_at: { 
             type: DataTypes.DATE,
             allowNull: false           
-         },
+        },
         updated_at: { 
             type: DataTypes.DATE,
             defaultValue: null
-         }
+        }
     }, {       
         timestamps: false,
         indexes:[
@@ -65,15 +67,15 @@ module.exports = (sequelize, DataTypes) => {
             as: 'Mahasiswa',
             onDelete: 'CASCADE'
         }),
-        User.hasOne(db.Token_session, {
+        User.hasOne(db.Token_history, {
             foreignKey: 'id_user',
             as: 'Token',
             onDelete: 'CASCADE'
         }),
         User.belongsTo(db.Ref_role, {
-            foreignKey: 'kode_role',
+            foreignKey: 'id_role',
             as: 'Role'
-        })
+        })        
     }
 
     return User;

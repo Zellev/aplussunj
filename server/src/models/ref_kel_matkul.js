@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
     const Kel_matkul = sequelize.define('Ref_kel_matkul', {
-        kode_kel_mk: { 
+        id_kel_mk: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
             primaryKey: true, 
@@ -18,7 +18,7 @@ module.exports = (sequelize, DataTypes) => {
 
     Kel_matkul.associate = db => {
         Kel_matkul.hasMany(db.Matakuliah, {
-            foreignKey: 'kode_kel_mk',
+            foreignKey: 'id_kel_mk',
             onDelete: 'CASCADE',
             as: 'Matkul'
         })

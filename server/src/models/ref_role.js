@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
     const Role = sequelize.define('Ref_role', {
-        kode_role: { 
+        id_role: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
             primaryKey: true, 
@@ -18,7 +18,7 @@ module.exports = (sequelize, DataTypes) => {
 
     Role.associate = db => {
         Role.hasOne(db.User, {
-            foreignKey: 'kode_role',
+            foreignKey: 'id_role',
             onDelete: 'RESTRICT',
             as: 'User'
         });

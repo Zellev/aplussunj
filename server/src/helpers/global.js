@@ -1,12 +1,10 @@
 /* eslint-disable */
 const createError = require('../errorHandlers/ApiErrors')
 const Passport = require('passport');
-const pdfMake = require('pdfMake/build/pdfmake');
-const vfsFonts = require('pdfMake/build/vfs_fonts');
 const jwt = require('jsonwebtoken');
 const config = require('../config/dbconfig');
-const path = require('path');
-pdfMake.vfs = vfsFonts.pdfMake.vfs;
+const bcrypt = require('bcrypt');
+const { Paket_soal } = require('../models');
 
 const payload = (user) => {  
   return {
@@ -16,7 +14,12 @@ const payload = (user) => {
   }  
 }
 
-module.exports = {
+module.exports = {  
+
+  /** 
+   * @param {object} user
+   * @returns 
+   */
 
   generateAccessToken(user) {    
     const time = '10m'
@@ -28,14 +31,27 @@ module.exports = {
       expiration: time
     }
   },
-  
+
+  /** 
+   * @param {object} user
+   * @returns 
+   */
+
   generateRefreshToken(user) {
+    // dconst time = '7d'
     const signed = jwt.sign( payload(user), config.auth.refreshTokenSecret);    
     return {
       token: signed
     }
   },
 
+  /** 
+   * @param {Number} pages
+   * @param {Number} limits
+   * @param {Object} options
+   * @returns {Object}
+   */
+  
   async paginator(model, pages, limits, options) {       
     const page = pages
     const limit = limits
@@ -63,7 +79,7 @@ module.exports = {
               page: page + 1,
               limit: limit
           }
-        }
+        }        
         delete options.countModel
         results.results = await model.findAll(options)
       } else {
@@ -78,40 +94,48 @@ module.exports = {
     return results
   },
 
-  async paginatorMN(getter, pages, limits, opt){
+  /** 
+   * @param {Object} opt
+   * @param {Number} pages
+   * @param {Number} limits
+   * @returns {Object}
+   */
+
+  async paginatorMN(opt, pages, limits){
     const page = pages
     const limit = limits
     const startIndex = (page - 1) * limit
     const endIndex = page * limit
 
     const results = {}
-    if (endIndex < await opt.model.count({where: opt.col})) {
-      results.next = {
-          page: page + 1,
-          limit: limit
-      }
+
+    if (endIndex < await opt.model.count()) {
+        results.next = {
+            page: page + 1,
+            limit: limit
+        }
     }    
     if (startIndex > 0) {
-      results.previous = {
-          page: page - 1,
-          limit: limit
-      }
+        results.previous = {
+            page: page - 1,
+            limit: limit
+        }
     }
-    results.results = getter
-
+    results.results = opt.finder
     return results
   },
 
-  async auther(req, res ,next) { 
-    return new Promise((resolve, reject) => {           
-        Passport.authenticate('jwt',{ session: false }, (err, user) => {
-            if (err) {
-              reject(new Error(err.message)) // not valid token
-            } else if (!user) {
-              reject(createError.Unauthorized('Server error!'))
-            }
-            resolve(user)
-        })(req, res, next);
+  async auther(opt) {    
+    return new Promise((resolve, reject) => {
+      let x = opt.auth_name;
+      Passport.authenticate(x, { session: false }, (err, user) => {
+        if (err) {
+          reject(err)
+        } else if (!user) {         
+          reject(createError.Unauthorized('Not Authorized!'))
+        }
+        resolve(user)
+      })(opt.req, opt.res, opt.next);
     })
   },
 
@@ -123,96 +147,145 @@ module.exports = {
     return dateTime
   },
 
-  createKode(length) {
-    let result = '';
-    const characters = 'ABC0DEF1GHI2JKL3MNO4PQR5STU6VWX7YZ0812394560789';
-    let charactersLength = characters.length;
-    for ( var i = 0; i < length; i++ ) {
-      result += characters.charAt(Math.floor(Math.random() * charactersLength));
-    }
-    return result;
+  dateFull() {
+    var today = new Date();
+    const monthNames = ["Januari", "Februari", "Maret", "April", "May", "Juni",
+      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+    var dd = String(today.getDate());
+    var mm = monthNames[today.getMonth()];
+    var yyyy = today.getFullYear();
+    today = dd + ' ' + mm + ' ' + yyyy;
+    return today
   },
 
-  pdfCreatestatus(col, row, res) {
-    const img = 'data:image/png;base64,' + require('fs')
-                .readFileSync(path.resolve(__dirname,'../../public/pdftemplate','kop_surat.png'))
-                .toString('base64')
-    let rows;        
-    var imge = {            
-        image: img,
-        height: 130,
-        width: 520
-    }
-    var dataTable = {
-        style: 'table',
-        table: {
-            headerRows: 1,
-            body: [ col ]
-        },
-        layout: {
-            hLineWidth: function(i, node) {
-              if (i === 0 || i === node.table.body.length) {
-                return 0;
-              } else if (i === node.table.headerRows) {
-                return 2;
-              } else {
-                return 1;
-              }
-            },
-            vLineWidth: function(i) {
-              return 0;
-            },
-            hLineColor: function(i) {
-              if (i === 1) {
-                return '#2361AE';
-              } else {
-                return '#84a9d6';
-              }
-            },
-            paddingLeft: function(i) {
-              if (i === 0) {
-                return 0;
-              } else {
-                return 8;
-              }
-            },
-            paddingRight: function(i, node) {
-              if (i === node.table.widths.length - 1) {
-                return 0;
-              } else {
-                return 8;
-              }
-            }
-          }
+  /** 
+   * @param {Object} obj
+   * @param {Function} functn
+   * @returns {Object} 
+   */
+
+  objectMap(obj, functn) {
+    return Object.fromEntries(
+      Object.entries(obj).map(
+        ([k, v], i) => [k, functn(v, k, i)]
+      )
+    )
+  },
+
+  /** 
+   * @param {Number} length
+   * @returns {String} 
+   */
+
+  async createKode(length) {
+    let kdPaket = '', paketExist;
+    var characters       = config.codegen.char;
+    var charactersLength = characters.length;
+    function shuffle(char){
+      var a = char.split(""), n = a.length;  
+      for(var i = n - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var tmp = a[i];
+          a[i] = a[j];
+          a[j] = tmp;
+      }
+      return a.join("");
+    }   
+    do {
+      for ( var i = 0; i < length; i++ ) {
+        kdPaket += characters.charAt(Math.floor(Math.random() * charactersLength));
+      }  
+      paketExist = await Paket_soal.findOne({  //paketExist = null
+        attributes:['kode_paket'],
+        where: {kode_paket: kdPaket}
+      });
+      characters = shuffle(characters);
+    } while(paketExist) // false
+    return kdPaket;
+  },
+
+  shuffleArray() {
+    var arrLength = 0;
+    var argsLength = arguments.length;
+    var rnd, tmp;
+    var isArray = Array.isArray || function (value) {
+      return {}.toString.call(value) !== "[object Array]"
     };
-    rows = dataTable.table.body;
-    for(let i of row){
-        rows.push(i)
+  
+    for (var index = 0; index < argsLength; index += 1) {
+      if (!isArray(arguments[index])) {
+        throw new TypeError("Argument is not an array.");
+      }
+  
+      if (index === 0) {
+        arrLength = arguments[0].length;
+      }
+  
+      if (arrLength !== arguments[index].length) {
+        throw new RangeError("Array lengths do not match.");
+      }
     }
-    var dd = {
-        content: [],
-        styles: {
-            table: {
-                margin: [10, 5, 0, 0]
-            },
-            tableHeader: {
-                bold: true,
-                fontSize: 12,
-                color: '#2361AE'
-            }
+  
+    while (arrLength) {
+      rnd = Math.floor(Math.random() * arrLength);
+      arrLength -= 1;
+      for (argsIndex = 0; argsIndex < argsLength; argsIndex += 1) {
+        tmp = arguments[argsIndex][arrLength];
+        arguments[argsIndex][arrLength] = arguments[argsIndex][rnd];
+        arguments[argsIndex][rnd] = tmp;
+      }
+    }
+  },
+
+  /**
+   * @param {String} start 
+   * @param {String} end 
+   * @returns {String} 
+   */
+  
+  timeDiff(start, end) {
+    function hmsToSeconds(s) {
+      var b = s.split(':');
+      return b[0] * 3600 + b[1] * 60 + (+b[2] || 0);
+    }
+    
+    function secondsToHMS(secs) {
+      function z(n) { return (n < 10 ? '0' : '') + n; }
+      var sign = secs < 0 ? '-' : '';
+      secs = Math.abs(secs);
+      return sign + z(secs / 3600 | 0) + ':' + z((secs % 3600) / 60 | 0) + ':' + z(secs % 60);
+    }
+    
+    var startTime = hmsToSeconds(start);
+    var endTime = hmsToSeconds(end);
+    
+    var diff = secondsToHMS(endTime - startTime);
+    
+    var r = Number(diff.split(':')[0]) * 60 * 60 * 1000 + Number(diff.split(':')[1]) * 60 * 1000;
+    
+    var diffHrs = Math.floor((r % 86400000) / 3600000);
+    var diffMins = Math.round(((r % 86400000) % 3600000) / 60000);
+    
+    let durasi;
+    if(diffHrs){
+      durasi = `${diffHrs} jam ${diffMins} menit`
+    } else {
+      durasi = `${diffMins} menit`
+    }
+    return durasi;
+  }, 
+
+  async hashed() {
+    return new Promise((resolve, reject) => {
+      bcrypt.hash(config.auth.defaultPass, 10, (err, hash) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(hash);
         }
-    }
-    dd.content.push(imge, ' ', ' ', dataTable)
-    const pdfDoc = pdfMake.createPdf(dd);
-    return pdfDoc.getBase64((val)=>{
-        res.writeHead(200,
-        {                
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment;filename="${module.exports.todaysdate()}-status.pdf"`
-        });    
-        const download = Buffer.from(val.toString('utf-8'), 'base64');            
-        res.end(download);
-    });
-  }
+      })
+    })
+  }// hash default password, ada di .env
 
 }

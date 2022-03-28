@@ -1,73 +1,65 @@
+// const { format } = require('date-fns') 
+
 module.exports = (sequelize, DataTypes) => { 
     const Paket_soal = sequelize.define('Paket_soal', {
-        kode_paket: { 
-            type: DataTypes.STRING(11),
-            allowNull: false,
-            primaryKey: true
-        },
-        kode_jenis_ujian: {
+        id_paket: {
             type: DataTypes.INTEGER(11).UNSIGNED,
-            allowNull: true
+            allowNull: false,
+            primaryKey: true,
+            autoIncrement: true
         },
-        judul_ujian: {
-            type: DataTypes.STRING(25),
+        kode_paket: { 
+            type: DataTypes.STRING(5),
+            unique: true,
             allowNull: false
         },
-        tanggal_mulai: {
-            type: DataTypes.DATEONLY,
+        id_ujian: { 
+            type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false
         },
-        waktu_mulai: {
-            type: DataTypes.TIME,
-            allowNull: false
-        },
-        durasi_ujian: {
-            type: DataTypes.TIME
-        },
-        bobot_total: {
-            type: DataTypes.INTEGER(5).UNSIGNED,
-            allowNull: false
-        },
-        status: {
-            type: DataTypes.ENUM('terbit','draft'),            
-            allowNull: false
-        },
-        deskripsi: {
-            type: DataTypes.TEXT
-        },
-        created_at: { 
-            type: DataTypes.DATE,
-            allowNull: false           
-        },
-        updated_at: { 
-            type: DataTypes.DATE,
-            defaultValue: null
+        aktif: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: 1
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
-        indexes:[
-            {
-                name: 'archived_by_createdAt',
-                unique: false,
-                fields:['created_at', 'updated_at']
-            }
-        ]
+        timestamps: false
     });
 
-    Paket_soal.associate = db => {        
-        Paket_soal.belongsTo(db.Ref_jenis_ujian, {
-            foreignKey: 'kode_jenis_ujian',
-            as: 'RefJenis'
+    Paket_soal.associate = db => {
+        Paket_soal.belongsTo(db.Ujian, {
+            foreignKey: 'id_ujian',
+            as: 'Ujian'
+        }),        
+        Paket_soal.belongsToMany(db.Soal_essay, {
+            through: 'Rel_paketsoal_soal',
+            foreignKey: 'id_paket',
+            onDelete: 'CASCADE',
+            as: 'Soals'
         }),
-        Paket_soal.belongsToMany(db.Kelas, {
-            through: 'Rel_kelas_paketsoal',
-            foreignKey: 'kode_paket',
-            as: 'Kelases'
+        Paket_soal.hasMany(db.Rel_paketsoal_soal, {
+            foreignKey: 'id_paket',
+            onDelete: 'CASCADE',
+            as: 'PaketSoal_Soal_auto',
+            constraint: false
         }),
-        Paket_soal.hasMany(db.Rel_kelas_paketsoal, {
-            foreignKey: 'kode_paket',
-            as: 'PaketOccurance'
+        Paket_soal.hasMany(db.Rel_paketsoal_soal, {
+            foreignKey: 'id_paket',
+            onDelete: 'CASCADE',
+            as: 'PaketSoal_Soal_manual',
+            constraint: false
+        }),
+        Paket_soal.belongsToMany(db.Mahasiswa, {
+            through: 'Rel_mahasiswa_paketsoal',
+            foreignKey: 'id_paket',
+            onDelete: 'CASCADE',
+            as: 'Mahasiswas'
+        }),
+        Paket_soal.hasMany(db.Rel_mahasiswa_paketsoal, {
+            foreignKey: 'id_paket',
+            onDelete: 'CASCADE',
+            as: 'PaketSoal_mhs'
         })
     };
 

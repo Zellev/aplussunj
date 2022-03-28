@@ -1,96 +1,90 @@
-const { User, Dosen, Mahasiswa,
-  Captcha, Lupa_pw, Matakuliah,
-  Ref_kel_matkul, Ref_peminatan,
-  Ref_semester, Ref_role, Kelas,
-  Pengumuman, Paket_soal } = require('../models');
-const bcrypt = require('bcrypt');
-// const jwt = require('jsonwebtoken');
+const { User, Dosen, Mahasiswa, Captcha, Lupa_pw, Matakuliah, Kelas, 
+        Paket_soal, Token_history, Ujian, Notifikasi, Pengumuman, 
+        Ref_kel_matkul, Ref_peminatan, Ref_semester, Ref_role, 
+        Ref_jenis_ujian,  Rel_mahasiswa_paketsoal } = require('../models');
 const config = require('../config/dbconfig');
-const sequelize = require('sequelize');
 const path = require('path');
-const xlsx = require('xlsx');
-// const schedule = require('node-schedule');
-const { paginator, pdfCreatestatus, todaysdate } = require('../helpers/global');
+const ExcelJS = require('exceljs');
+const CacheControl = require('../controllers/CacheControl');
+const pdf = require('html-pdf');
+const fs = require('fs');
 const createError = require('../errorHandlers/ApiErrors');
-const { Op } = require('sequelize');
+const { promisify } = require('util');
+const unlinkAsync = promisify(fs.unlink);
+const { paginator, shuffleArray, todaysdate, dateFull, hashed } = require('../helpers/global');
+const { ujianValidator, matkulValidator } = require('../validator/SearchValidator');
+const { Op, fn } = require('sequelize');
 
-const xlsxPath = (filename) => {
-  return path.join(__dirname,'../../public/fileuploads/xlsxInput/' + filename);
+const pathAll = (filename, filetype) => {
+  if(filetype === 'xlsx'){
+    return path.join(__dirname,'../../public/fileuploads/xlsxInput/' + filename);
+  } else if(filetype === 'pdf'){
+    return path.join(__dirname,'../../public/pdftemplate/' + filename);
+  }  
 }
-// function jwtSignuser (user) {
-//   const TIME = 60 * 60 * 24 * 1 // per-1 hari
-//   return jwt.sign(user, config.auth.secretKey, {
-//     expiresIn: TIME
-//   });
-// }
+
 const getUser = async obj => {
-  return await User.findOne({
+  return User.findOne({
       where: obj
   });
 }
 
 const getUserid = async () => {
-  return await (User.max('id')).then((val) => {
-    return Promise.resolve(parseInt(val))
+  return User.max('id').then((val) => {
+    return val + 1;
   });
 }
 
-const hashed = async () => {
-  return await new Promise((resolve, reject) => {
-    bcrypt.hash(config.auth.defaultPass, 10, (err, hash) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(hash);
-      }
-    })
-  })
-}// hash default password, ada di .env
-
 const dosen = (model, noreg) => {
   return model.findOne({
+    attributes:['id_dosen'],
     where:{[Op.or]:[
-      {NIDN:noreg},
-      {NIDK:noreg}
-    ]}
+      {NIDN: noreg},
+      {NIDK: noreg}
+    ]},
+    raw: true
   })
 }
+
+const getStatus = async () => {
+  const users = await User.count();
+  const userAdmin = await User.count({
+    where: {id_role: '1'}
+  });
+  const userDosen = await User.count({
+    where: {id_role: '2'}
+  });
+  const userMahasiswa = await User.count({
+    where: {id_role: '3'}
+  });
+  const matakuliah = await Matakuliah.count();
+  const kelas = await Kelas.count();
+  const ujian = await Ujian.count();
+  const today = new Date();
+  const date = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
+  const online = await Token_history.count({
+    where: {created_at: date},
+    group: 'id_user'
+  });
+  return [{
+    total_users: users,
+    total_online_users: online,
+    jumlah_admin: userAdmin,
+    jumlah_dosen: userDosen,
+    jumlah_mhs: userMahasiswa,
+    total_matakuliah: matakuliah,
+    total_kelas: kelas,
+    total_ujian: ujian   
+  }]
+}
+
 module.exports = {
-  /* Dashboard 
-    stuff in dashboard: (front = cronned per day)
-    -graph stuff about:
-      1.  Number of active users of app, uses session
-      2.  Number of total users, update/day
-      3.  Number of total users /role, update/day
-      4.  Number of accessed kelas and matkul per month
-      5.  Number of paket soal created per day
-      6.  Number of ujian started and/or completed per day
-  */
-  async getStatus(){
-    const users = await User.count();
-    const userAdmin = await User.count({
-      where: {kode_role: '1'}
-    });
-    const userDosen = await User.count({
-      where: {kode_role: '2'}
-    });
-    const userMahasiswa = await User.count({
-      where: {kode_role: '3'}
-    });
-    const paketSoal = await Paket_soal.count();
-    return [{
-      total_users: users,
-      jumlah_admin: userAdmin,
-      jumlah_dosen: userDosen,
-      jumlah_mhs: userMahasiswa,
-      total_paketSoal: paketSoal
-    }]
-  },
 
   async getDashboard(req, res, next) {
     try {      
-      const status = await module.exports.getStatus()
-      res.send({
+      const status = await getStatus()
+      CacheControl.getDashboardAdmin(req);
+      res.status(200).json({
         statusApp: status
       })
     } catch (error) {
@@ -100,23 +94,33 @@ module.exports = {
 
   async printStatusPdf(req, res, next) {
     try {
-      const obj = await module.exports.getStatus()
-      let rows = [], i = 0, len, item;   
-      const column = [
-        {text: 'Total User',style: 'tableHeader'}, {text: 'Jumlah Admin',style: 'tableHeader'}, 
-        {text: 'Jumlah Dosen',style: 'tableHeader'}, {text: 'Jumlah Mahasiswa',style: 'tableHeader'}, 
-        {text: 'Total PaketSoal',style: 'tableHeader'}
-      ]
-      len = obj.length;
-      while (i < len) {
-        item = obj[i];
-        rows.push([
-            {text: item.total_users,alignment: 'center'}, {text: item.jumlah_admin,alignment: 'center'}, 
-            {text: item.jumlah_dosen,alignment: 'center'}, {text: item.jumlah_mhs,alignment: 'center'}, 
-            {text: item.total_paketSoal,alignment: 'center'}
-        ]);i++;
-      }
-      pdfCreatestatus(column, rows, res)
+      const arrObj = await getStatus();
+      const options = {format: 'A4'};
+      const tanggal = dateFull();
+      const img = 'data:image/png;base64,' + fs
+          .readFileSync(path.resolve(__dirname,'../../public/pdftemplate','kop_surat.png'))
+          .toString('base64');
+      res.render(pathAll('status.hbs', 'pdf'), {
+        kop_surat: img,
+        data: arrObj,
+        tanggal: tanggal
+      }, function (err, HTML) {
+        if(err) return createError.internal('Error while reading Handlebars: '+ err);
+        pdf.create(HTML, options).toBuffer(function (err, buffer) {
+          if (err) {
+            return createError.BadRequest('Error while generating PDF: '+ err);
+          }
+          const output = ((val) => {
+            res.writeHead(200, {
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-status_app.pdf"`
+            })
+            const download = Buffer.from(val);
+            res.end(download);
+          });
+          output(buffer);
+        })
+      });
     } catch (error) {
       next(error)
     }
@@ -124,21 +128,33 @@ module.exports = {
 
   async printStatusXcel(req, res, next) {
     try {
-      const obj = await module.exports.getStatus()
-      let newWB = xlsx.utils.book_new()
-      let newWS = xlsx.utils.json_to_sheet(obj)
-      xlsx.utils.book_append_sheet(newWB, newWS, 'Status_app')
-      const wb_opts = {bookType: 'xlsx', type: 'base64'};
-      const file = xlsx.write(newWB, wb_opts)
+      const arrObj = await getStatus();
+      const newWB = new ExcelJS.Workbook();
+      const newWS = newWB.addWorksheet('Status_app');
+      var reColumns = [
+        {header:'Total User', key:'total_users', style:{font:{name: 'Times New Roman'}}},
+        {header:'Jumlah Admin', key:'jumlah_admin', style:{font:{name: 'Times New Roman'}}},
+        {header:'Jumlah Dosen', key:'jumlah_dosen', style:{font:{name: 'Times New Roman'}}},
+        {header:'Jumlah Mahasiswa', key:'jumlah_mhs', style:{font:{name: 'Times New Roman'}}},
+        {header:'Jumlah Ujian', key:'total_ujian', style:{font:{name: 'Times New Roman'}}},
+        {header:'Jumlah User Online', key:'total_online_users', style:{font:{name: 'Times New Roman'}}},
+        {header:'Jumlah Matakuliah', key:'total_matakuliah', style:{font:{name: 'Times New Roman'}}},
+        {header:'Jumlah Kelas', key:'total_kelas', style:{font:{name: 'Times New Roman'}}}
+      ];
+      newWS.columns = reColumns;
+      newWS.addRows(arrObj);
+      newWS.mergeCells('A3:H3');
+      newWS.getCell('A3').value = 'tertanggal, ' + dateFull();
+      newWS.getCell('A3').alignment = { horizontal:'center'} ;      
       const output = ((val)=>{
-        res.writeHead(200,{        
-          'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-status.xlsx"`
+        res.writeHead(200,{       
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-status_app.xlsx"`
         })
-        const download = Buffer.from(val.toString('utf-8'), 'base64');            
+        const download = Buffer.from(val);
         res.end(download);
       })
-      output(file)
-      
+      output(await newWB.xlsx.writeBuffer());
     } catch (error) {
       next(error)
     }
@@ -160,8 +176,9 @@ module.exports = {
                 role: role.role
             })
         }
-        const users = await Promise.all(vals)
-        res.send({
+        const users = await Promise.all(vals);
+        CacheControl.getAllUser(req);
+        res.status(200).json({
             next:val.next,
             previous:val.previous,
             users: users
@@ -171,16 +188,15 @@ module.exports = {
     }
   },
 
-  async cariUser(req, res, next) {
+  async searchUser(req, res, next) {
     try {
       let { find } = req.query;
       find = find.toLowerCase();
       let user = [], temp = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      let opt = {
-        order: [['id', 'ASC']],
-        attributes: ['id', 'username', 'email', 'status_civitas'],
+      let opt = {        
+        attributes: ['id', 'username', 'email', 'status_civitas', 'id_role'],
         where: {
           [Op.or]: [
             {id: {[Op.like]:'%' + find + '%'}},
@@ -193,12 +209,12 @@ module.exports = {
         offset: (pages - 1) * limits,
         limit: limits,
         include: {
-          model: Ref_role, as: 'Role', required: true,
-          attributes: ['role']
-        }
+          model: Ref_role, as: 'Role', attributes: ['role']
+        },
+        order: [['id', 'ASC']]
       }
       user = await paginator(User, pages, limits, opt);
-      if (user.results.length === 0) {temp.push('No Record...')}
+      if (user.results.length === 0) {temp.push('No record...')}
       for (let i of user.results){          
         temp.push({
           id: i.id,
@@ -208,7 +224,8 @@ module.exports = {
           role: i.Role.role
         })
       }
-      res.send({
+      CacheControl.getAllUser(req);
+      res.status(200).json({
         next: user.next,
         previous: user.previous,
         user: temp
@@ -223,7 +240,7 @@ module.exports = {
       const { id_user } = req.params;
       const user = await getUser({id:id_user});
       let role;
-      if (user.kode_role === 3){
+      if (user.id_role === 3){
         const mhs =  await user.getMahasiswa();
         role = {
           user_id: user.id,
@@ -233,9 +250,11 @@ module.exports = {
           role: 'Mahasiswa',
           foto_profil: user.foto_profil,
           keterangan: user.keterangan,
-          Mahasiswa: mhs
+          created_at: user.created_at,
+          updated_at: user.updated_at,
+          data_mahasiswa: mhs
         };
-      } else if (user.kode_role === 2){
+      } else if (user.id_role === 2){
         const dosen =  await user.getDosen();
         role = {
           user_id: user.id,
@@ -245,20 +264,23 @@ module.exports = {
           role: 'Dosen',
           foto_profil: user.foto_profil,
           keterangan: user.keterangan,
-          Mahasiswa: dosen
+          created_at: user.created_at,
+          updated_at: user.updated_at,
+          data_dosen: dosen
         };
       } else {
         role = user;
       }
-      res.send(role);
+      CacheControl.getUser(req);
+      res.status(200).json(role);
     } catch (error) {
       next(error);
     }
   },
 
-  async ubahUser(req, res, next) {
+  async putUser(req, res, next) {
     try {
-      const { id_user } = req.params;
+      const { id_user } = req.params;console.log('here')
       const { username, email, status_civitas, keterangan } = req.body;
       if (!email) {
         throw createError.BadRequest('tolong diisi!');
@@ -268,16 +290,15 @@ module.exports = {
             email: email,
             status_civitas: status_civitas,
             keterangan: keterangan,
-            updated_at: sequelize.fn('NOW')
+            updated_at: fn('NOW')
         };
         await User.update(updateVal, {
           where: { id: id_user }
         });
-
+        CacheControl.putUser;
         res.status(200).json({
           success: true,
-          msg: 'data user berhasil diubah',
-          id_user: id_user
+          msg: `data user ${id_user} berhasil diubah`
         });
       }
     } catch (error) {
@@ -285,70 +306,62 @@ module.exports = {
     }
   },
 
-  async ubahUserbulk(req, res, next) {
-    try {
-      if (req.file === undefined) {
+  async putUserbulk(req, res, next) {
+    try {console.log('here')
+      if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename)
-      const wb = xlsx.readFile(excelFile);
-      let ws = {}, updates = [];
-      for (const sheetName of wb.SheetNames) {          
-          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
-      }
-      let rows = ws.User_updater      
-      rows.map((val)=>{
-        var row = Object.values(val)
-        updates.push({
-          id: row[0],
-          username: row[1],
-          email: row[2],
-          status_civitas: row[3],
-          keterangan: row[4],
-          updated_at: sequelize.fn('NOW')
-        })      
-      })
-      await User.bulkCreate(updates, {
+      let updateVal = [];
+      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('User_updater');
+      ws.eachRow(function (row, rowNumber) {
+        if(rowNumber > 1){
+          updateVal.push({
+            id: row.values[1],
+            username: row.values[2],
+            email: row.values[3],
+            status_civitas: row.values[4],
+            keterangan: row.values[5],
+            updated_at: fn('NOW')
+          })
+        }
+      });
+      await User.bulkCreate(updateVal, {
         updateOnDuplicate: [
           'id', 'username','email','status_civitas',
           'keterangan', 'updated_at'
         ]
       });
+      CacheControl.putUser;
       res.status(200).json({
         success: true,
         msg: 'data user berhasil diubah sesuai: ' + req.file.originalname
       });
     } catch (error) {
-      console.log('periksa excelnya');
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
       next(error);
     }
   },
 
-  async hapusUser(req, res, next) {
+  async deleteUser(req, res, next) {
     try {
         const { id_user } = req.params;
         const getuser = await getUser({id:id_user})
-        if (!getuser) { throw createError.NotFound('data tidak ditemukan')}
-        const delUser = await User.destroy({
-          where:{
+        const currentAdm = req.user.id;
+        if (!getuser) { throw createError.NotFound('data user tidak ditemukan.')}
+        if (id_user === currentAdm) {
+          throw createError.BadRequest('tidak bisa menghapus diri sendiri.')
+        }
+        await User.destroy({
+          where: {
             id: getuser.id
           }
-        })
-        if(getuser.kode_role === 3){
-          const mhs = getuser.getMahasiswa()
-          const delmhs = await Mahasiswa.destroy({
-            where:{kode_mhs: mhs.kode_mhs}
-          })
-          delUser && delmhs
-        } else if(getuser.kode_role === 2){
-          const dosen = getuser.getDosen()
-          const deldosen = await Dosen.destroy({
-            where:{kode_dosen: dosen.kode_dosen}
-          })
-          delUser && deldosen
-        } else {
-          delUser
-        }
+        });
+        CacheControl.deleteUser;
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -358,129 +371,94 @@ module.exports = {
     }
   },
   /* Profil admin operation methods*/
-  async getOwnProfil(req, res, next) {
+  async getProfile(req, res, next) {
     try {
       const id = req.user.id;      
-      const admin = await getUser({id:id});
-      res.send(admin)
+      const admin = await getUser({id: id});
+      const json = admin.toJSON();      
+      delete json.password, delete json.id_role;
+      CacheControl.getmyProfileAdmin(req);
+      res.status(200).json(json);
     } catch (error) {
       next(error);
     }
   },
 
-  async editOwnProfil(req, res, next) {
+  async putProfile(req, res, next) {
     try {
+      const user = req.user;
       const { username, email, status_civitas, keterangan } = req.body;
-      const id = req.user.id;   
-      const user = await getUser({id:id});
-      if ( user.kode_role !== 1) { throw createError.Forbidden('tidak bisa diedit disini!') }
       let updateVal = {
         username: username,
         email: email,
         status_civitas: status_civitas,
         keterangan: keterangan,
-        updated_at: sequelize.fn('NOW')
+        updated_at: fn('NOW')
       };
-
       await User.update(updateVal, {
         where: { id: user.id }
       });
-
+      CacheControl.putmyProfileAdmin;
       res.status(200).json({
         success: true,
-        msg: 'profil '+ user.username +' berhasil diedit'
-      })/*.then(() => {
-        res.redirect('/')
-      })*/
+        msg: `profil anda berhasil diubah`
+      });
     } catch (error) {
-      next(error)
-    }
-  },
-
-  async daftarAdmin (req, res, next){
-    try {
-        const { email, username } = req.body
-        const user = await User.create({
-            username: username,
-            email: email,
-            password: await hashed(),
-            status_civitas: 'aktif',
-            kode_role: '1',
-            created_at: sequelize.fn('NOW')
-        });
-        const userJson = user.toJSON();
-        res.status(200).json({
-          success: true,
-          msg: 'new Admin berhasil ditambah',
-          user_id: userJson.id,
-          username: userJson.username,
-          email: userJson.email,
-          created_at: userJson.created_at
-        });
-    } catch (error) {
-        next(error);
+      next(error);
     }
   },
   /* Daftar operation methods*/
   async daftar (req, res, next) {
     try {
-        const { role, NIP, NIDN, NIDK, NIM, email, nama_lengkap, nomor_telp} = req.body;
-        var data;
-        var username = await getUserid()+1;
-
-        if ( role === 'Dosen' ) {
-          data = async () => {
-            return await User.create({
-              username: 'User'+' '+ username,
-              email: email,
-              status_civitas: 'aktif',
-              password: await hashed(),
-              kode_role: '2',
-              foto_profil: null,
-              keterangan: null,
-              created_at: sequelize.fn('NOW'),
-              Dosen: {
-                  NIP: NIP,
-                  NIDN: NIDN,
-                  NIDK: NIDK,
-                  nama_lengkap: nama_lengkap,
-                  nomor_telp: nomor_telp,
-                  created_at: sequelize.fn('NOW')
-                }
-              }, {
-                include: {model: Dosen, as: 'Dosen'}
-            });
-          }
-        } else if ( role === 'Mahasiswa' ) {
-          data = async () => {
-          return await User.create({
+        const { NIP, NIDN, NIDK, NIM, email, nama_lengkap, nomor_telp} = req.body;
+        let Role, username = await getUserid();
+        let path = req.baseUrl + req.path;
+        if ( path === '/admin/dosen' ) {
+          await User.create({
             username: 'User'+' '+ username,
             email: email,
             status_civitas: 'aktif',
             password: await hashed(),
-            kode_role: '3',
-            created_at: sequelize.fn('NOW'),
+            id_role: '2',
+            foto_profil: null,
+            keterangan: null,
+            created_at: fn('NOW'),
+            Dosen: {
+                NIP: NIP,
+                NIDN: NIDN,
+                NIDK: NIDK,
+                nama_lengkap: nama_lengkap,
+                nomor_telp: nomor_telp,
+                created_at: fn('NOW')
+              }
+            }, {
+              include: {model: Dosen, as: 'Dosen'}
+          });          
+          Role = 'dosen';
+        } else if ( path === '/admin/mahasiswa' ) {
+          await User.create({
+            username: 'User'+' '+ username,
+            email: email,
+            status_civitas: 'aktif',
+            password: await hashed(),
+            id_role: '3',
+            created_at: fn('NOW'),
             Mahasiswa: {
                 NIM: NIM,
                 nama_lengkap: nama_lengkap,
                 nomor_telp: nomor_telp,
-                created_at: sequelize.fn('NOW')
+                created_at: fn('NOW')
               }
             }, {
               include: {model: Mahasiswa, as: 'Mahasiswa'}
           });
-        }
+        Role = 'Mahasiswa';
       }
-        const Data = await data()
-        const user = Data.toJSON()
-        res.status(200).json({
-          success: true,
-          msg: 'user berhasil ditambahkan!',
-          user_id: user.id,
-          username: user.username,
-          email: user.email,
-          kode_role: user.kode_role
-        });
+      CacheControl.postNewUser;
+      res.status(200).json({
+        success: true,
+        msg: `${Role} berhasil ditambahkan`
+      });
     } catch (error) {
         next(error);
     }
@@ -493,19 +471,20 @@ module.exports = {
         let val = await paginator(Dosen, pages, limits);
         let vals = [];
         if(val.results.length !== 0){
-          for(let i of val.results) {// iterate over array from findall            
-            vals.push({// push only some wanted values, zellev
-              kode_dosen: i.kode_dosen,
+          for(let i of val.results) {         
+            vals.push({
+              id_dosen: i.id_dosen,
               NIDN: i.NIDN,
               NIDK: i.NIDK,
               nama_lengkap: i.nama_lengkap
             })    
           }
         } else {
-          vals.push('no record...')
+          vals.push('No record...')
         }       
         const dosen = await Promise.all(vals);
-        res.send({
+        CacheControl.getAllDosen(req);
+        res.status(200).json({
             next:val.next,
             previous:val.previous,
             dosen: dosen
@@ -515,16 +494,15 @@ module.exports = {
     }
   },
 
-  async cariDosen(req, res, next) {
+  async searchDosen(req, res, next) {
     try {
       let { find } = req.query;
       find = find.toLowerCase();
       let dosen = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      let opt = {
-        order: [['kode_dosen', 'ASC']],
-        attributes: ['kode_dosen', 'NIDN', 'NIDK', 'nama_lengkap'],
+      let opt = {        
+        attributes: ['id_dosen', 'NIDN', 'NIDK', 'nama_lengkap'],
         where: {
           [Op.or]: [
             {nama_lengkap: {[Op.like]:'%' + find + '%'}},
@@ -533,11 +511,13 @@ module.exports = {
           ] 
         },
         offset: (pages - 1) * limits,
-        limit: limits
+        limit: limits,
+        order: [['id_dosen', 'ASC']]
       }
       dosen = await paginator(Dosen, pages, limits, opt);
-      if (dosen.results.length === 0) {dosen.results.push('No Record...')}
-      res.send({
+      if (dosen.results.length === 0) {dosen.results.push('No record...')}
+      CacheControl.getAllDosen(req);
+      res.status(200).json({
         next: dosen.next,
         previous: dosen.previous,
         dosen: dosen.results
@@ -549,53 +529,52 @@ module.exports = {
 
   async daftarDosenbulk (req, res, next) {
     try {
-      if (req.file == undefined) {
+      if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename);
-      const wb = xlsx.readFile(excelFile);
-      let ws = {};
-      for (const sheetName of wb.SheetNames) {          
-          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('User_dosen');
+      for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
+        if(rowNum > 1){
+          let row = ws.getRow(rowNum).values
+          await User.create({
+            username: 'User'+' '+ await getUserid(),
+            email: row[5],
+            status_civitas: 'aktif',
+            password: await hashed(),
+            id_role: '2',
+            created_at: fn('NOW'),
+            Dosen: {
+                NIP: row[1],
+                NIDN: row[2],
+                NIDK: row[3],
+                nama_lengkap: row[4],
+                nomor_telp: row[6],
+                created_at: fn('NOW')
+              }
+          }, {
+            include: { model: Dosen, as: 'Dosen'}
+          })
+        }
       }
-      let rows = ws.User_dosen
-      rows = rows.map((i) => {
-        return Object.values(i)
-      })
-      for(let row of rows) {
-        let userId = await getUserid()+1;
-        let pass = await hashed();
-        await User.create({
-          username: 'User'+' '+ userId,
-          email: row[4],
-          status_civitas: 'aktif',
-          password: pass,
-          kode_role: '2',
-          created_at: sequelize.fn('NOW'),
-          Dosen: {
-              NIP: row[0],
-              NIDN: row[1],
-              NIDK: row[2],
-              nama_lengkap: row[3],
-              nomor_telp: '0'+row[5],
-              created_at: sequelize.fn('NOW')
-            }
-        }, {
-          include: { model: Dosen, as: 'Dosen'}
-        });
-      }
-      res.status(200).send({
-        msg: 'data berhasil diimport ke DB: ' + req.file.originalname
+      CacheControl.postNewUser;
+      res.status(200).json({
+        success: true,
+        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
       })
     } catch (error) {
-      console.log('periksa excelnya');
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
       next(error);
     }
   },
 
-  async ubahDosen(req, res, next) {
+  async putDosen(req, res, next) {
     try {
-      const { kode_dosen } = req.params;
+      const { id_dosen } = req.params;
       const { NIP, NIDN, NIDK, nama_lengkap, alamat, nomor_telp } = req.body;
       if (!NIDK) {
         throw createError.BadRequest('tolong diisi!');
@@ -607,16 +586,15 @@ module.exports = {
             nama_lengkap: nama_lengkap,
             alamat: alamat,
             nomor_telp: nomor_telp,
-            updated_at: sequelize.fn('NOW')
+            updated_at: fn('NOW')
         };
         await Dosen.update(updateVal, {
-          where: { kode_dosen: kode_dosen }
+          where: { id_dosen: id_dosen }
         });
-
+        CacheControl.putDosen;
         res.status(200).json({
           success: true,
-          msg: 'data dosen berhasil diubah',
-          kode_dosen: kode_dosen
+          msg: 'data dosen berhasil diubah'
         });
       }
     } catch (error) {
@@ -624,63 +602,69 @@ module.exports = {
     }
   },
 
-  async ubahDosenbulk(req, res, next) {
+  async putDosenbulk(req, res, next) {
     try {
-      if (req.file == undefined) {
+      if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename)
-      const wb = xlsx.readFile(excelFile);
-      let ws = {}, updates = [];
-      for (const sheetName of wb.SheetNames) {          
-          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
-      }
-      let rows = ws.Dosen_updater
-      rows.map((val)=>{
-        var row = Object.values(val)
-        updates.push({
-          kode_dosen: row[0],
-          NIP: row[1],
-          NIDN: row[2],
-          NIDK: row[3],
-          nama_lengkap: row[4],
-          alamat: row[5],
-          nomor_telp: '0'+row[6],
-          updated_at: sequelize.fn('NOW')
-        })      
+      let updateVal = [];
+      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('Dosen_updater');
+      ws.eachRow(function(row, rowNumber) {
+        if(rowNumber > 1){
+          updateVal.push({
+            id_dosen: row.values[1],
+            NIP: row.values[2],
+            NIDN: row.values[3],
+            NIDK: row.values[4],
+            nama_lengkap: row.values[5],
+            alamat: row.values[6],
+            nomor_telp: row.values[7],
+            updated_at: fn('NOW')
+          })
+        }
       });
-      await Dosen.bulkCreate(updates, {
+      await Dosen.bulkCreate(updateVal, {
         updateOnDuplicate: [
-          'NIP','NIDN','NIDK','nama_lengkap',
+          'id_dosen','NIP','NIDN','NIDK','nama_lengkap',
           'alamat','nomor_telp', 'updated_at'
         ]
       });
+      CacheControl.putDosen;
       res.status(200).json({
         success: true,
         msg: 'data dosen berhasil diubah sesuai: ' + req.file.originalname
       });
     } catch (error) {
-      console.log('periksa excelnya');
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
       next(error);
     }
   },
 
-  async hapusDosen(req, res, next) {
+  async deleteDosen(req, res, next) {
     try {
-        const { kode_dosen } = req.params;
+        const { id_dosen } = req.params;
         const getdosen = await Dosen.findOne({
-          where: {kode_dosen: kode_dosen},
-          include: {model: User, as: 'User'}
+          attributes:['id_dosen'],
+          where: {id_dosen: id_dosen},
+          include: {model: User, as: 'User', attributes: ['id']}
         });
-        if (!getdosen) { throw createError.NotFound('data tidak ditemukan')}
+        if (!getdosen) { throw createError.NotFound('data dosen tidak ditemukan.')}
         await Dosen.destroy({
-          where:{
-            kode_dosen: getdosen.kode_dosen
-        }});
+          where: {
+            id_dosen: getdosen.id_dosen
+          }
+        });
         await User.destroy({
-          where:{
+          where: {
             id: getdosen.User.id
-        }});
+          }
+        });
+        CacheControl.deleteDosen;
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -699,16 +683,17 @@ module.exports = {
         if(val.results.length !== 0){
           for(let i of val.results) {// iterate over array from findall          
             vals.push({// push only some wanted values, zellev
-              kode_mhs: i.kode_mhs,
+              id_mhs: i.id_mhs,
               NIM: i.NIM,
               nama_lengkap: i.nama_lengkap
             })
           }
         } else {
-          vals.push('no record...')
+          vals.push('No record...')
         }
         const mhs = await Promise.all(vals);
-        res.send({
+        CacheControl.getAllMhs(req);
+        res.status(200).json({
             next:val.next,
             previous:val.previous,
             mhs: mhs
@@ -718,16 +703,15 @@ module.exports = {
     }
   },
 
-  async cariMhs(req, res, next) {
+  async searchMhs(req, res, next) {
     try {
       let { find } = req.query;
       find = find.toLowerCase();
       let mhs = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      let opt = {
-        order: [['kode_mhs', 'ASC']],
-        attributes: ['kode_mhs', 'NIM', 'nama_lengkap'],
+      let opt = {        
+        attributes: ['id_mhs', 'NIM', 'nama_lengkap'],
         where: {
           [Op.or]: [
             {nama_lengkap: {[Op.like]:'%' + find + '%'}},
@@ -735,11 +719,13 @@ module.exports = {
           ] 
         },
         offset: (pages - 1) * limits,
-        limit: limits
+        limit: limits,
+        order: [['id_mhs', 'ASC']]
       }
       mhs = await paginator(Mahasiswa, pages, limits, opt);
-      if (mhs.results.length === 0) {mhs.results.push('No Record...')}
-      res.send({
+      if (mhs.results.length === 0) {mhs.results.push('No record...')}
+      CacheControl.getAllMhs(req);
+      res.status(200).json({
         next: mhs.next,
         previous: mhs.previous,
         mhs: mhs.results
@@ -751,51 +737,50 @@ module.exports = {
 
   async daftarMhsbulk (req, res, next) {
     try {
-      if (req.file == undefined) {
+      if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename)
-      const wb = xlsx.readFile(excelFile);
-      let ws = {};
-      for (const sheetName of wb.SheetNames) {          
-          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName]);
+      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('User_mahasiswa');
+      for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
+        if(rowNum > 1){
+          let row = ws.getRow(rowNum).values
+          await User.create({
+            username: 'User'+' '+  await getUserid(),
+            email: row[3],
+            status_civitas: 'aktif',
+            password: await hashed(),
+            id_role: '3',
+            created_at: fn('NOW'),
+            Mahasiswa: {
+                NIM: row[1],
+                nama_lengkap: row[2],
+                nomor_telp: row[4],
+                created_at: fn('NOW')
+              }
+          }, {
+            include: {model: Mahasiswa, as: 'Mahasiswa'}
+          });
+        }
       }
-      let rows = ws.User_mahasiswa
-      rows = rows.map((i) => {
-        return Object.values(i)
-      })
-      for(let row of rows) {
-        let userId = await getUserid()+1;
-        let pass = await hashed();
-        await User.create({
-          username: 'User'+' '+ userId,
-          email: row[2],
-          status_civitas: 'aktif',
-          password: pass,
-          kode_role: '3',
-          created_at: sequelize.fn('NOW'),
-          Mahasiswa: {
-              NIM: row[0],
-              nama_lengkap: row[1],
-              nomor_telp: '0'+row[3],
-              created_at: sequelize.fn('NOW')
-            }
-        }, {
-          include: {model: Mahasiswa, as: 'Mahasiswa'}
-        });
-      }
-      res.status(200).send({
-        msg: 'data berhasil diimport ke DB: ' + req.file.originalname
+      CacheControl.postNewUser;
+      res.status(200).json({
+        success: true,
+        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
       })
     } catch (error) {
-      console.log('periksa excelnya');
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
       next(error);
     }
   },
 
-  async ubahMhs(req, res, next) {
+  async putMhs(req, res, next) {
     try {
-      const { kode_mhs } = req.params;
+      const { id_mhs } = req.params;
       const { NIM, nama_lengkap, alamat, nomor_telp } = req.body;
       if (!NIM) {
         throw createError.BadRequest('tolong diisi!');
@@ -805,16 +790,15 @@ module.exports = {
             nama_lengkap: nama_lengkap,
             alamat: alamat,
             nomor_telp: nomor_telp,
-            updated_at: sequelize.fn('NOW')
+            updated_at: fn('NOW')
         };
         await Mahasiswa.update(updateVal, {
-          where: { kode_mhs: kode_mhs }
+          where: { id_mhs: id_mhs }
         });
-
+        CacheControl.putMhs;
         res.status(200).json({
           success: true,
-          msg: 'data mahasiswa berhasil diubah',
-          kode_mhs: kode_mhs
+          msg: 'data mahasiswa berhasil diubah'
         });
       }
     } catch (error) {
@@ -822,62 +806,67 @@ module.exports = {
     }
   },
 
-  async ubahMhsbulk(req, res, next) {
+  async putMhsbulk(req, res, next) {
     try {
-      if (req.file == undefined) {
+      if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename)
-      const wb = xlsx.readFile(excelFile);
-      let ws = {}, updates = [];
-      for (const sheetName of wb.SheetNames) {          
-          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName]);
-      }
-      let rows = ws.Mahasiswa_updater
-      rows.map((val)=>{
-        var row = Object.values(val)
-        updates.push({
-          kode_mhs: row[0],
-          NIM: row[1],
-          nama_lengkap: row[2],
-          alamat: row[3],
-          nomor_telp: '0'+row[4],
-          updated_at: sequelize.fn('NOW')
-        })
-      })
-      await Mahasiswa.bulkCreate(updates, {
+      let updateVal = [];
+      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('Mahasiswa_updater');
+      ws.eachRow(function(row, rowNumber) {
+        if(rowNumber > 1){
+          updateVal.push({
+            id_mhs: row.values[1],
+            NIM: row.values[2],
+            nama_lengkap: row.values[3],
+            alamat: row.values[4],
+            nomor_telp: row.values[5],
+            updated_at: fn('NOW')
+          })
+        }
+      });
+      await Mahasiswa.bulkCreate(updateVal, {
         updateOnDuplicate: [
-          'NIM','nama_lengkap','alamat',
+          'id_mhs','NIM','nama_lengkap','alamat',
           'nomor_telp', 'updated_at'
         ]
       });
-
+      CacheControl.putMhs;
       res.status(200).json({
         success: true,
         msg: 'data mahasiswa berhasil diubah sesuai: ' + req.file.originalname
       });
     } catch (error) {
-      console.log('periksa excelnya');
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }      
       next(error);
     }
   },
 
-  async hapusMhs(req, res, next) {
+  async deleteMhs(req, res, next) {
     try {
-        const { kode_mhs } = req.params;
+        const { id_mhs } = req.params;
         const getMhs = await Mahasiswa.findOne({
-          where: {kode_mhs: kode_mhs},
-          include: {model: User, as: 'User'}
+          attributes:['id_mhs'],
+          where: {id_mhs: id_mhs},
+          include: {model: User, as: 'User', attributes: ['id']}
         });
-        if (!getMhs) { throw createError.NotFound('data tidak ditemukan')}
+        if (!getMhs) { throw createError.NotFound('data mahasiswa tidak ditemukan.')}
         await Mahasiswa.destroy({
           where:{
-            kode_mahasiswa: getMhs.kode_mhs
-        }});
+            id_mhs: getMhs.id_mhs
+          }
+        });
         await User.destroy({
-          where:{
+          where: {
             id: getMhs.User.id
-        }});
+          }
+        });
+        CacheControl.deleteMhs;
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -895,21 +884,19 @@ module.exports = {
         let vals = [];
         if(val.results.length !== 0){
           for(let i of val.results) {
-            let smstr = await i.getRefSem({
-              attributes: ['semester']
-            })
             vals.push({
+              id_matkul: i.id_matkul,
               kode_matkul: i.kode_matkul,
               nama_matkul: i.nama_matkul,
-              sks: i.sks,
-              semester: smstr.semester
+              sks: i.sks
             })
           }
         } else {
-          vals.push('no record...')
+          vals.push('No record...')
         }
         const matkul = await Promise.all(vals)
-        res.send({
+        CacheControl.getAllMatkul(req);
+        res.status(200).json({
             next:val.next,
             previous:val.previous,
             matkul: matkul
@@ -919,41 +906,32 @@ module.exports = {
     }
   },
 
-  async cariMatkul(req, res, next) {
+  async searchMatkul(req, res, next) {
     try {
       let { find } = req.query;
-      find = find.toLowerCase();
+      const validator = matkulValidator(find);
       let matkul = [], temp = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      let opt = {
-        order: [['kode_matkul', 'ASC']],
-        attributes: ['kode_matkul', 'nama_matkul', 'sks'],
-        where: {
-          [Op.or]: [
-            {kode_matkul: {[Op.like]:'%' + find + '%'}},
-            {nama_matkul: {[Op.like]:'%' + find + '%'}},
-            {'$RefSem.semester$': {[Op.like]:'%' + find + '%'}}
-          ]
-        },
+      let opt = {        
+        attributes: ['id_matkul','kode_matkul', 'nama_matkul', 'sks'],
+        where: { [Op.or]: validator },
         offset: (pages - 1) * limits,
         limit: limits,
-        include: {
-          model: Ref_semester, as: 'RefSem', required: true,
-          attributes: ['semester']
-        }
+        order: [['id_matkul', 'ASC']]
       }
       matkul = await paginator(Matakuliah, pages, limits, opt);
-      if (matkul.results.length === 0) {temp.push('No Record...')}
+      if (matkul.results.length === 0) {temp.push('No record...')}
       for (let i of matkul.results){          
-          temp.push({
-            kode_matkul: i.kode_seksi,
-            nama_matkul: i.nama_matkul,
-            sks: i.sks,
-            semester: i.RefSem.semester
-          })
-        }
-      res.send({
+        temp.push({
+          id_matkul: i.id_matkul,
+          kode_matkul: i.kode_matkul,
+          nama_matkul: i.nama_matkul,
+          sks: i.sks
+        })
+      }
+      CacheControl.getAllMatkul(req);
+      res.status(200).json({
         next: matkul.next,
         previous: matkul.previous,
         matkul: temp
@@ -965,22 +943,28 @@ module.exports = {
 
   async getMatkul(req, res, next) {
     try {
-      const { kode_matkul } = req.params;
-      const val = await Matakuliah.findOne({where:{kode_matkul:kode_matkul}});
-      if (!val) { throw createError.BadRequest('matakuliah tidak terdaftar!')}
-      // console.log(Object.keys(val.__proto__)); => magic logger!
-      const kelMk = await val.getKelMk({where:{kode_kel_mk:val.kode_kel_mk}});
-      const pemin = await val.getRefPemin({where:{kode_peminatan:val.kode_peminatan}});
+      const { id_matkul } = req.params;
+      const val = await Matakuliah.findOne({
+        where: {id_matkul: id_matkul},
+        include: [
+          {model: Ref_kel_matkul, as: 'KelMk', attributes: ['kode_kel_mk','kelompok_matakuliah']},
+          {model: Ref_peminatan, as: 'RefPemin', attributes: ['kode_peminatan','peminatan']}
+        ]
+      });
+      if (!val) { throw createError.NotFound('data matakuliah tidak ditemukan.')}
       const matkul = {
+        id_matkul: val.id_matkul,
         kode_matkul: val.kode_matkul,
-        kelompok_Mk: kelMk.kelompok_matakuliah,
-        Peminatan: pemin.peminatan,
+        kelompok_Mk: val.KelMk.kelompok_matakuliah,
+        Peminatan: val.RefPemin.peminatan,
         nama_matkul: val.nama_matkul,
-        semester: val.semester,
         sks: val.sks,
-        desktripsi: val.desktripsi
+        desktripsi: val.desktripsi,
+        created_at: val.created_at,
+        updated_at: val.updated_at
       };
-      res.send(matkul);
+      CacheControl.getMatkul(req);
+      res.status(200).json(matkul);
     } catch (error) {
       next(error);
     }
@@ -988,26 +972,24 @@ module.exports = {
 
   async setMatkul(req, res, next){
     try {
-      const { kode_matkul, kelompok_matkul, peminatan, nama_matkul, semester, sks, deskripsi } = req.body;
-      const getKelmk = await Ref_kel_matkul.findOne({where:{kelompok_matakuliah:kelompok_matkul}});
-      const getPemin = await Ref_peminatan.findOne({where:{peminatan:peminatan}});
-      const getSms = await Ref_semester.findOne({where:{semester:semester}});
+      const { kode_matkul, id_kel_mk, id_peminatan, nama_matkul, sks, deskripsi } = req.body;
+      const matkul = await Matakuliah.findOne({
+        where: {kode_matkul: kode_matkul}, 
+        attributes: ['id_matkul']
+      });
+      if(matkul) throw createError.Conflict('kode matkul sudah terdaftar!');
       await Matakuliah.create({
         kode_matkul: kode_matkul,
-        kode_kel_mk: getKelmk.kode_kel_mk,
-        kode_peminatan: getPemin.kode_peminatan,
+        id_kel_mk: id_kel_mk,
+        id_peminatan: id_peminatan,
         nama_matkul: nama_matkul,
-        semester: getSms.kode_semester,
         sks: sks,
         deskripsi: deskripsi
-      })
+      });
+      CacheControl.postNewMatkul;
       res.status(200).json({
         success: true,
-        msg: 'matakuliah berhasil ditambahkan',
-        kode_matkul: kode_matkul,
-        matakuliah: nama_matkul,
-        semester: semester,
-        sks: sks
+        msg: 'matakuliah berhasil ditambahkan'
       });
     } catch (error) {
       next(error);
@@ -1016,151 +998,152 @@ module.exports = {
 
   async setMatkulbulk(req, res, next) {
     try {
-      if (req.file == undefined) {
+      if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename)
-      const wb = xlsx.readFile(excelFile);
-      let ws = {}, matkuls = [];
-      for (const sheetName of wb.SheetNames) {          
-          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName]), {defval:null};
-      }
-      let rows = ws.Matakuliah
-      rows = rows.map((i) => {
-        return Object.values(i)    
-      })
-      for(let row of rows) {
-        let val = {
-          getKelmk: await Ref_kel_matkul.findOne({where:{kelompok_matakuliah:row[1]}}),
-          getPemin: await Ref_peminatan.findOne({where:{peminatan:row[2]}}),
-          getSms: await Ref_semester.findOne({where:{semester:row[4]}})
+      let data = [];
+      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('Matakuliah');
+      for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
+        if(rowNum > 1){
+          let row = ws.getRow(rowNum).values
+          row[3] = row[3] ?? null;
+          row[6] = row[6] ?? null;
+          let val = {
+            getKelmk: await Ref_kel_matkul.findOne({
+              attributes: ['id_kel_mk','kelompok_matakuliah'],
+              where: {kelompok_matakuliah: row[2]}
+            }),
+            getPemin: await Ref_peminatan.findOne({
+              attributes: ['id_peminatan','peminatan'],
+              where: {peminatan: row[3]}
+            }),
+          }
+          if(!val.getKelmk) throw createError.NotFound(`kelompok matakuliah untuk data ${row[2]} tidak ditemukan.`)
+          if(!val.getPemin) throw createError.NotFound(`peminatan untuk data ${row[3]} tidak ditemukan.`)
+          data.push({
+            kode_matkul: row[1],
+            id_kel_mk: val.getKelmk.id_kel_mk,
+            id_peminatan: val.getPemin.id_peminatan,
+            nama_matkul: row[4],
+            sks: row[5],
+            deskripsi: row[6]
+          })
         }
-        matkuls.push({
-          kode_matkul: row[0],
-          kode_kel_mk: val.getKelmk.kode_kel_mk,
-          kode_peminatan: val.getPemin.kode_peminatan,
-          nama_matkul: row[3],
-          semester: val.getSms.kode_semester,
-          sks: row[5],
-          deskripsi: row[6]
-        })
       }
-      await Matakuliah.bulkCreate(matkuls).then(() => {
-        res.status(200).send({
-          msg: 'data berhasil diimport ke DB: ' + req.file.originalname
-        })
+      await Matakuliah.bulkCreate(data);
+      CacheControl.postNewMatkul;
+      res.status(200).json({
+        success: true,
+        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
       })
     } catch (error) {
-      console.log('periksa excelnya');
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
       next(error);
     }
   },
 
-  async editMatkul(req, res, next) {
+  async putMatkul(req, res, next) {
     try {
-      const { kode_matkul } = req.params;
-      const { kode_mk, kelompok_mk, peminatan,
-        nama_matkul, semester, sks, deskripsi } = req.body;
-      if (!kode_mk) {
-        throw createError.BadRequest('tolong diisi!');
-      } else {
-        const mk = await Matakuliah.findByPk(kode_matkul);
-        if (!mk){throw createError.BadRequest('matkul tidak terdaftar!')}
-        const kel_mk = await mk.getKelMk({
-          where:{kelompok_matakuliah:kelompok_mk}
-        });
-        const pemin = await mk.getRefPemin({
-          where:{peminatan:peminatan}
-        })
-        let updateVal = {
-            kode_matkul: kode_mk,
-            kode_kel_mk: kel_mk.kode_kel_mk,
-            kode_peminatan: pemin.kode_peminatan,
-            nama_matkul: nama_matkul,
-            semester: semester,
-            sks: sks,
-            deskripsi: deskripsi,
-            updated_at: sequelize.fn('NOW')
-        };
-        await Matakuliah.update(updateVal, {
-          where: { kode_matkul: kode_matkul }
-        });
-
-        res.status(200).json({
-          success: true,
-          msg: 'data matakuliah berhasil diubah',
-          kode_matkul: kode_matkul
-        });
-      }
+      const { id_matkul } = req.params;
+      const { kode_matkul, id_kel_mk, id_peminatan, nama_matkul, sks, deskripsi } = req.body;
+      const mk = await Matakuliah.findByPk(id_matkul);
+      if (!mk){throw createError.NotFound('data matakuliah tidak ditemukan.')}
+      let updateVal = {
+          kode_matkul: kode_matkul,
+          id_kel_mk: id_kel_mk,
+          id_peminatan: id_peminatan,
+          nama_matkul: nama_matkul,
+          sks: sks,
+          deskripsi: deskripsi
+      };
+      await Matakuliah.update(updateVal, {
+        where: { id_matkul: id_matkul }
+      });
+      CacheControl.putMatkul;
+      res.status(200).json({
+        success: true,
+        msg: 'data matakuliah berhasil diubah'
+      });
     } catch (error) {
       next(error);
     }
   },
 
-  async editMatkulbulk(req, res, next) {
+  async putMatkulbulk(req, res, next) {
     try {
-      if (req.file == undefined) {
+      if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename)
-      const wb = xlsx.readFile(excelFile);
-      let ws = {}, updates = [];
-      for (const sheetName of wb.SheetNames) {          
-          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      let updateVal = [];
+      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('Matakuliah_updater');
+      for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
+        if(rowNum > 1){
+          let row = ws.getRow(rowNum).values
+          row[4] = row[4] ?? null;
+          row[7] = row[7] ?? null;
+          let val = {
+            getKelmk: await Ref_kel_matkul.findOne({
+              attributes: ['id_kel_mk','kelompok_matakuliah'],
+              where: {kelompok_matakuliah: row[3]}
+            }),
+            getPemin: await Ref_peminatan.findOne({
+              attributes: ['id_peminatan','peminatan'],
+              where: {peminatan: row[4]}
+            }),
+          }
+          if(!val.getKelmk) throw createError.NotFound(`kelompok matakuliah untuk data ${row[3]} tidak ditemukan.`)
+          if(!val.getPemin) throw createError.NotFound(`peminatan untuk data ${row[4]} tidak ditemukan.`)
+          updateVal.push({
+            id_matkul: row[1],
+            kode_matkul: row[2],
+            id_kel_mk: val.getKelmk.id_kel_mk,
+            id_peminatan: val.getPemin.id_peminatan,
+            nama_matkul: row[4],
+            sks: row[6],
+            deskripsi: row[7],
+            updated_at: fn('NOW')
+          })
+        }
       }
-      let rows = ws.Matakuliah_updater
-      rows = rows.map((i) => {
-        return Object.values(i)
-      })
-      for(let row of rows){
-        let val = {
-          getKelmk: await Ref_kel_matkul.findOne({where:{kelompok_matakuliah:row[1]}}),
-          getPemin: await Ref_peminatan.findOne({where:{peminatan:row[2]}}),
-          getSms: await Ref_semester.findOne({where:{semester:row[4]}})
-        };
-        updates.push({
-          kode_matkul: row[0],
-          kode_kel_mk: val.getKelmk.kode_kel_mk,
-          kode_peminatan: val.getPemin.kode_peminatan,
-          nama_matkul: row[3],
-          semester: val.getSms.kode_semester,
-          sks: row[5],
-          deskripsi: row[6],
-          updated_at: sequelize.fn('NOW')
-        }) 
-      }
-      await Matakuliah.bulkCreate(updates, {
-        updateOnDuplicate: [
-          'kode_matkul','kode_kel_mk','kode_peminatan',
-          'nama_matkul','semester','sks','deskripsi','updated_at',
-        ]
+      await Matakuliah.bulkCreate(updateVal, {
+        updateOnDuplicate: [ 'id_matkul','kode_matkul','id_kel_mk',
+          'id_peminatan','nama_matkul', 'sks','deskripsi','updated_at' ]
       });
+      CacheControl.putMatkul;
       res.status(200).json({
         success: true,
         msg: 'data matakuliah berhasil diubah sesuai: ' + req.file.originalname
       });
     } catch (error) {
-      console.log('periksa excelnya');
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
       next(error);
     }
   },
 
   async deleteMatkul(req, res, next) {
     try {
-        const { kode_matkul } = req.params;
+        const { id_matkul } = req.params;
         const getMatkul = await Matakuliah.findOne({
-          where: {kode_matkul: kode_matkul},
-          include: {model: Kelas, as: 'Kelas'}
+          attributes: ['id_matkul'],
+          where: {id_matkul: id_matkul}
         });
-        if (!getMatkul) { throw createError.NotFound('data tidak ditemukan')}
+        if (!getMatkul) { throw createError.NotFound('data matakuliah tidak ditemukan.')}
         await Matakuliah.destroy({
           where:{
-            kode_matkul: getMatkul.kode_matkul
-          }});
-        await Kelas.destroy({
-          where:{
-            kode_seksi:getMatkul.Kelas.kode_seksi
-          }});
+            id_matkul: getMatkul.id_matkul
+          }
+        });
+        CacheControl.deleteMatkul;
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -1170,27 +1153,155 @@ module.exports = {
     }
   },
   /* Kelas operation methods*/
+  async kelasGetMhs(req, res, next){
+    try {
+      const idKelas = req.params.id_kelas;
+      const kelas = await Kelas.findOne({
+        attributes: ['id_kelas'],
+        where: {id_kelas: idKelas},
+        include: {model: Mahasiswa, as: 'Mahasiswas', through: {attributes:[]}}
+      });
+      const kelasMhs = kelas.Mahasiswas.map((i) => {        
+        return {
+          id_mhs: i.id_mhs,
+          NIM: i.NIM,
+          nama_lengkap: i.nama_lengkap,
+          nomor_telp: i.nomor_telp       
+        }
+      });
+      CacheControl.getMhsKelas(req);
+      res.status(200).json({
+        mahasiswa: kelasMhs
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async kelasSetMhs(req, res, next){
+    try {
+      if (!req.file) {
+        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+      }
+      let data = [];
+      const excelFile = pathAll(req.file.filename, 'xlsx');      
+      const kelas = await Kelas.findByPk(req.params.id_kelas);
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('Kelas_mahasiswa');
+      ws.eachRow(function(row, rowNumber) {
+        if(rowNumber > 1){
+          data.push(row.values[1])
+        }
+      });
+      kelas.addMahasiswas(data);
+      CacheControl.postNewMhsKelas;
+      res.status(200).json({
+        success: true,
+        msg: `relasi mahasiswa-kelas berhasil di tambah sesuai ${req.file.originalname}`
+      })
+    } catch (error) {
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
+      next(error);
+    }
+  },
+
+  async kelasUpdateMhs(req, res, next){
+    try {
+      if (!req.file) {
+        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+      }
+      let updateVal = [];
+      const excelFile = pathAll(req.file.filename, 'xlsx');   
+      const kelas = await Kelas.findByPk(req.params.id_kelas);
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('Kelas_mahasiswa');
+      ws.eachRow(function(row, rowNumber) {
+        if(rowNumber > 1){
+          updateVal.push(row.values[1])
+        }
+      });
+      kelas.setMahasiswas(updateVal);
+      CacheControl.putMhsKelas;
+      res.status(200).json({
+        success: true,
+        msg: `relasi mahasiswa-kelas berhasil di ubah sesuai ${req.file.originalname}`
+      })
+    } catch (error) {
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
+      next(error);
+    }
+  },
+
+  async kelasRemoveMhs(req, res, next){
+    try {
+      const nim = req.body.nim;
+      const kelas = await Kelas.findByPk(req.params.id_kelas);      
+      kelas.removeMahasiswas(nim);
+      CacheControl.deleteMhsKelas;
+      res.status(200).json({
+        success: true,
+        msg: `relasi mahasiswa ${nim}, dengan kelas ini berhasil dihapus`
+      })
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async kelasGetDosen(req, res, next){
+    try {
+      const idKelas = req.params.id_kelas;
+      const kelas = await Kelas.findOne({
+        attributes: ['id_kelas'],
+        where: {id_kelas: idKelas},
+        include: {model: Dosen, as: 'Dosens', through: {attributes:[]}}
+      });
+      const kelasDosens = kelas.Dosens.map((i) => {        
+        return {
+          id_dosen: i.id_dosen,
+          NIP: i.NIP,
+          NIDN: i.NIDN,
+          NIDK: i.NIDK,
+          nama_lengkap: i.nama_lengkap,
+          nomor_telp: i.nomor_telp
+        }
+      });
+      CacheControl.getDosenKelas(req);
+      res.status(200).json({
+        dosen_pengampu: kelasDosens
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async kelasSetDosen(req, res, next) {
     try {
-      const { kode_seksi } = req.params
+      const { id_kelas } = req.params
       const { pengampu } = req.body
       let val = [], nidk = [];
-      const kls = await Kelas.findByPk(kode_seksi)
-      if(!pengampu.noreg_dosen1){
+      const kls = await Kelas.findByPk(id_kelas)
+      if(!pengampu.id_dosen1){
         throw createError.BadRequest('dosen 1 tidak boleh kosong!')
       } else {
-        val[0] = await dosen(Dosen, pengampu.noreg_dosen1)
-        val[1] = await dosen(Dosen, pengampu.noreg_dosen2)
-        val[2] = await dosen(Dosen, pengampu.noreg_dosen3)
+        val[0] = await Dosen.findByPk(pengampu.id_dosen1);
+        !pengampu.id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(pengampu.id_dosen2);
+        !pengampu.id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(pengampu.id_dosen3);
         for(let i of val){
           if(i !== null){
             nidk.push(i.NIDK)
             kls.addDosen(i)
           }
         }
+        CacheControl.postNewDosenKelas;
         res.status(200).json({
           success: true,
-          msg: `dosen pengampu ${nidk}, berhasil ditambahkan ke kode seksi ${kode_seksi}`
+          msg: `dosen pengampu ${nidk}, berhasil ditambahkan ke kode seksi ${kls.kode_seksi}`
         })
       }
     } catch (error) {
@@ -1200,27 +1311,27 @@ module.exports = {
 
   async kelasUpdateDosen(req, res, next) {
     try {
-      const { kode_seksi } = req.params
+      const { id_kelas } = req.params
       const { pengampu } = req.body
       let val = [], nidk = [], temp= [];
-      const kls = await Kelas.findByPk(kode_seksi)      
+      const kls = await Kelas.findByPk(id_kelas)      
       if(!pengampu.noreg_dosen1){
         throw createError.BadRequest('dosen 1 tidak boleh kosong!')
       } else {
-        val[0] = await dosen(Dosen, pengampu.noreg_dosen1)
-        val[1] = await dosen(Dosen, pengampu.noreg_dosen2)
-        val[2] = await dosen(Dosen, pengampu.noreg_dosen3)
+        val[0] = await Dosen.findByPk(pengampu.id_dosen1);
+        !pengampu.id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(pengampu.id_dosen2);
+        !pengampu.id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(pengampu.id_dosen3);
         for(let i of val){
           if(i !== null){
             nidk.push(i.NIDK)
             temp.push(i)            
           }
         }
-        kls.setDosens(temp)
-        // console.log(Object.keys(kls.__proto__))
+        kls.setDosens(temp);
+        CacheControl.putDosenKelas;
         res.status(200).json({
           success: true,
-          msg: `dosen pengampu kode seksi ${kode_seksi}, berhasil diubah ke ${nidk}`
+          msg: `dosen pengampu kode seksi ${kls.kode_seksi}, berhasil diubah ke ${nidk}`
         })
       }
     } catch (error) {
@@ -1230,27 +1341,14 @@ module.exports = {
 
   async kelasRemoveDosen(req, res, next) {
     try {
-      const { kode_seksi } = req.params
-      const { pengampu } = req.body
-      let val = [], nidk = [];
-      const kls = await Kelas.findByPk(kode_seksi)      
-      val[0] = await dosen(Dosen, pengampu.noreg_dosen1)
-      val[1] = await dosen(Dosen, pengampu.noreg_dosen2)
-      val[2] = await dosen(Dosen, pengampu.noreg_dosen3)
-      for(let i of val){
-        if(i !== null){
-          nidk.push(i.NIDK)
-          kls.removeDosen(i)
-        } else {
-          throw createError.BadRequest(
-            `tidak ada dosen yang dihapus untuk kode seksi ${kode_seksi}`
-          )
-        }
-      }
+      const kelas = await Kelas.findByPk(req.params.id_kelas);
+      const noregDosens = req.body.id_dosen;
+      kelas.removeDosens(noregDosens);
+      CacheControl.deleteDosenKelas;
       res.status(200).json({
         success: true,
-        msg: `dosen pengampu ${nidk} untuk kode seksi ${kode_seksi}, berhasil dihapus`
-      })      
+        msg: `dosen pengampu ${noregDosens}, untuk kode seksi ini berhasil dihapus`
+      })
     } catch (error) {
       next(error)
     }
@@ -1258,38 +1356,37 @@ module.exports = {
 
   async setKelas(req, res, next){
     try {
-      let val = [], nidk = [];
-      const { kode_seksi, noreg_dosen1, noreg_dosen2, noreg_dosen3, nama_matkul, hari, jam, deskripsi } = req.body;
-      const getKodeMK = await Matakuliah.findOne({where:{nama_matkul:nama_matkul}});
-      val[0] = await dosen(Dosen, noreg_dosen1)
-      val[1] = await dosen(Dosen, noreg_dosen2)
-      val[2] = await dosen(Dosen, noreg_dosen3)
-      if(!getKodeMK) {
-        throw createError.BadRequest('nama matakuliah tidak terdaftar!')
-      }
+      let val = [], nidk = [], desc;
+      const { kode_seksi, id_dosen1, id_dosen2, id_dosen3, id_matkul, 
+              id_semester, hari, jam, deskripsi } = req.body;
+      const objKelas = await Kelas.findOne({
+        where: {kode_seksi: kode_seksi}, 
+        attributes: ['id_kelas']
+      });
+      if(objKelas) throw createError.Conflict('kode seksi sudah terdaftar!');
+      val[0] = await Dosen.findByPk(id_dosen1);
+      !id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(id_dosen2);
+      !id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(id_dosen3);
+      deskripsi === "" ? desc = null : desc = deskripsi; 
       const kelas = await Kelas.create({
         kode_seksi: kode_seksi,
-        kode_matkul: getKodeMK.kode_matkul,
+        id_matkul: id_matkul,
+        id_semester: id_semester,
         hari: hari,
         jam: jam,
-        deskripsi: deskripsi
+        deskripsi: desc
       })
+      if(val.length === 0) {throw createError.BadRequest('dosen 1 tidak boleh kosong!')}
       for(let i of val){
-        if(i !== null){
+        if(i){
           nidk.push({noreg_dosen: i.NIDK})
           kelas.addDosen(i)
-        } else if (!i[0]){
-          throw createError.BadRequest(
-            'dosen 1 tidak boleh kosong euy!' //easter egg
-          )
         }
       }
+      CacheControl.postNewKelas;
       res.status(200).json({
         success: true,
-        msg: 'kelas berhasil ditambahkan',
-        kode_seksi: kode_seksi,        
-        matkul: getKodeMK.nama_matkul,
-        pengampu: nidk
+        msg: 'kelas berhasil ditambahkan'
       });
     } catch (error) {
       next(error);
@@ -1297,161 +1394,669 @@ module.exports = {
   },
 
   async setKelasbulk(req, res, next) {
+    let kdSeksi = [];
     try {
-      if (req.file == undefined) {
+      if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename)
-      const wb = xlsx.readFile(excelFile);
-      let ws = {};
-      for (const sheetName of wb.SheetNames) {          
-          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
-      }
-      let rows = ws.Kelas, val = [];
-      rows = rows.map((i) => {
-        return Object.values(i)    
-      })
-      for(let row of rows) {
-        let getMk = await Matakuliah.findOne({where:{nama_matkul:row[1]}})
-        val[0] = await dosen(Dosen, row[5])
-        val[1] = await dosen(Dosen, row[6])
-        val[2] = await dosen(Dosen, row[7])
-        let kelas = await Kelas.create({
-          kode_seksi: row[0],
-          kode_matkul: getMk.kode_matkul,
-          hari: row[2],
-          jam: row[3],
-          deskripsi: row[4]
-        })
-        for(let i of val){
-          if(i !== null){
-            kelas.addDosen(i)
-          } else if (!i[0]){
-            throw createError.BadRequest(
-              `dosen 1 tidak boleh kosong ${row[0]}`
-            )
+      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('Kelas');
+      for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
+        if(rowNum > 1){
+          let row = ws.getRow(rowNum).values;
+          row[3] = row[3] ?? null;
+          row[6] = row[6] ?? null;
+          let getMk = await Matakuliah.findOne({
+            attributes: ['id_matkul','nama_matkul'],
+            where: {nama_matkul: row[2]}
+          });
+          let getSemester = await Ref_semester.findOne({
+            attributes: ['id_semester','semester'],
+            where: {semester: row[3]}
+          });
+          if(!getMk) throw createError.NotFound(`matakuliah untuk data ${row[2]} tidak ditemukan.`)
+          if(!getSemester) throw createError.NotFound(`semester untuk data ${row[3]} tidak ditemukan.`)                   
+          let kelas = await Kelas.create({
+            kode_seksi: row[1],
+            id_matkul: getMk.id_matkul,
+            id_semester: getSemester.id_semester,
+            hari: row[4],
+            jam: row[5],
+            deskripsi: row[6]
+          });
+          if(!row[7]) {
+            kdSeksi.push(row[1]);
+            throw createError.BadRequest(`dosen 1 pada kelas ${row[1]} tidak boleh kosong!`);            
           }
-        }       
+          for(let i = 0; i < 3; i++){
+            if(row[7+i]){
+              let idDosen = await dosen(Dosen, row[7+i]);
+              kelas.addDosen(idDosen.id_dosen)
+            }
+          }
+        }
       }
-      res.status(200).send({
-        msg: 'data berhasil diimport ke DB: ' + req.file.originalname
+      CacheControl.postNewKelas;
+      res.status(200).json({
+        success: true,
+        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
       })             
     } catch (error) {
-      console.log('periksa excelnya');
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+        if(kdSeksi.length > 0) {
+          await Kelas.destroy({where: {kode_seksi: kdSeksi}});
+        }        
+      }
       next(error);
     }
   },
 
-  async editKelas(req, res, next) {
+  async putKelas(req, res, next) {
     try {
-      const { kode_seksi } = req.params;
-      const { kode_sksi, noreg_dosen1, noreg_dosen2, noreg_dosen3, nama_matkul, hari, jam, deskripsi } = req.body;
+      const { id_kelas } = req.params;
+      const { kode_seksi, id_dosen1, id_dosen2, id_dosen3, id_matkul, 
+              id_semester, hari, jam, deskripsi } = req.body;
       let val = [], temp = [];
-      if (!kode_sksi) {
-        throw createError.BadRequest('tolong diisi!');
-      } else {
-        const getKelas = await Kelas.findByPk(kode_seksi)
-        const getKodeMK = await Matakuliah.findOne({where:{nama_matkul:nama_matkul}});
-        val[0] = await dosen(Dosen, noreg_dosen1)
-        val[1] = await dosen(Dosen, noreg_dosen2)
-        val[2] = await dosen(Dosen, noreg_dosen3)
-        if (!getKelas||!getKodeMK){
-          throw createError.BadRequest('kelas atau matakuliah tidak terdaftar!')
-        }
-        let updateVal = {
-            kode_seksi: kode_sksi,
-            kode_matkul: getKodeMK.kode_matkul,
-            hari: hari,
-            jam: jam,
-            deskripsi: deskripsi,
-            updated_at: sequelize.fn('NOW')
-        };
-        await Kelas.update(updateVal, {
-          where: { kode_seksi: kode_seksi }
-        });
-        for(let i of val){
-          if(i !== null) {
-            temp.push(i)
-          }
-        }
-        getKelas.setDosens(temp)
-        res.status(200).json({
-          success: true,
-          msg: 'data kelas berhasil diubah',
-          kode_seksi: kode_seksi
-        });
+      const getKelas = await Kelas.findByPk(id_kelas)
+      if (!getKelas){
+        throw createError.NotFound('data kelas tidak ditemukan.')
       }
+      val[0] = await Dosen.findByPk(id_dosen1);
+      !id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(id_dosen2);
+      !id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(id_dosen3);
+      let updateVal = {
+          kode_seksi: kode_seksi,
+          id_matkul: id_matkul,
+          id_semester: id_semester,
+          hari: hari,
+          jam: jam,
+          deskripsi: deskripsi,
+          updated_at: fn('NOW')
+      };
+      await Kelas.update(updateVal, {
+        where: { id_kelas: id_kelas }
+      });
+      for(let i of val){
+        if(i) {
+          temp.push(i)
+        }
+      }
+      getKelas.setDosens(temp);
+      CacheControl.putKelas;
+      res.status(200).json({
+        success: true,
+        msg: 'data kelas berhasil diubah'
+      });      
     } catch (error) {
       next(error);
     }
   },
 
-  async editKelasbulk(req, res, next) { // TODO: this!
+  async putKelasbulk(req, res, next) {
     try {
-      if (req.file == undefined) {
+      if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      const excelFile = xlsxPath(req.file.filename)
-      const wb = xlsx.readFile(excelFile);
-      let ws = {}, updates = [];
-      for (const sheetName of wb.SheetNames) {          
-          ws[sheetName] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
-      }
-      let rows = ws.Matakuliah_updater, val = [], temp = [];
-      rows = rows.map((i) => {
-        return Object.values(i)    
-      })
-      for(let row of rows){        
-        let getMk = await Matakuliah.findOne({where:{nama_matkul:row[1]}})
-        let getKelas = await Kelas.findByPk(row[0])
-        val[0] = await dosen(Dosen, row[5])
-        val[1] = await dosen(Dosen, row[6])
-        val[2] = await dosen(Dosen, row[7])        
-        updates.push({
-          kode_seksi: row[0],
-          kode_matkul: getMk.kode_matkul,
-          hari: row[2],
-          jam: row[3],
-          deskripsi: row[4],
-          updated_at: sequelize.fn('NOW')
-        })
-        for(let i of val){
-          if(i !== null) {
-            temp.push(i)
-          }
+      let updateVal = [];
+      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const workbook = new ExcelJS.Workbook();
+      const wb = await workbook.xlsx.readFile(excelFile);
+      const ws = wb.getWorksheet('Kelas_updater');
+      for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
+        if(rowNum > 1){
+          let row = ws.getRow(rowNum).values
+          row[4] = row[4] ?? null;
+          row[7] = row[4] ?? null;
+          let getMk = await Matakuliah.findOne({
+            attributes:['id_matkul','nama_matkul'],
+            where: {nama_matkul: row[3]}
+          });                  
+          let getSemester = await Ref_semester.findOne({
+            attributes:['id_semester','semester'],
+            where: {semester: row[4]}
+          });
+          if(!getMk) throw createError.NotFound(`matakuliah untuk data ${row[3]} tidak ditemukan.`);
+          if(!getSemester) throw createError.NotFound(`semester untuk data ${row[4]} tidak ditemukan.`);     
+          updateVal.push({
+            id_kelas: row[1],
+            kode_seksi: row[2],
+            id_matkul: getMk.id_matkul,
+            id_semester: getSemester.id_semester,
+            hari: row[5],
+            jam: row[6],
+            deskripsi: row[7],
+            updated_at: fn('NOW')
+          });
+          if(row[8]||row[9]||row[10]) {
+            const kelas = await Kelas.findOne({where: {id_kelas: row[1]}});
+            for(let i; i < 3; i++){
+              if(row[8+i]) {
+                let idDosen = await dosen(Dosen, row[8+i]);
+                kelas.setDosens(idDosen.id_dosen);
+              }
+            }
+          }           
         }
-        getKelas.setDosens(temp)
       }
-      await Kelas.bulkCreate(updates, {
-        updateOnDuplicate: [
-          'kode_seksi','kode_matkul','hari',
-          'jam','deskripsi','updated_at',
-        ]
-      });      
+      await Kelas.bulkCreate(updateVal, {
+        updateOnDuplicate: [ 'id_kelas','kode_seksi','id_matkul','id_semester', 
+          'hari','jam','deskripsi','updated_at' ]
+      });
+      CacheControl.putKelas;  
       res.status(200).json({
         success: true,
         msg: 'data kelas berhasil diubah sesuai: ' + req.file.originalname
       });
     } catch (error) {
-      console.log('periksa excelnya');
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
       next(error);
     }
   },
 
   async deleteKelas(req, res, next) {
     try {
-        const { kode_seksi } = req.params;
-        const getKelas = await Kelas.findByPk(kode_seksi)
-        if (!getKelas) { throw createError.NotFound('data tidak ditemukan')}
-        await Kelas.destroy({
-          where:{
-            kode_seksi: getKelas.kode_seksi
-          }});
-        getKelas.setDosens([])
-        res.status(200).json({
-          success: true,
-          msg: 'data berhasil dihapus'
-        });
+      const { id_kelas } = req.params;
+      const getKelas = await Kelas.findByPk(id_kelas);
+      if (!getKelas) { throw createError.NotFound('data kelas tidak ditemukan.')}
+      //console.log(Object.keys(getKelas.__proto__))
+      await Kelas.destroy({
+        where:{
+          id_kelas: getKelas.id_kelas
+        }
+      });
+      CacheControl.deleteKelas;
+      res.status(200).json({
+        success: true,
+        msg: 'data berhasil dihapus'
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+  /* Kelas-ujian operation method */
+  async kelasGetAllUjian(req, res, next){
+    try {
+      const idKelas = req.params.id_kelas;
+      const pages = parseInt(req.query.page);
+      const limits = parseInt(req.query.limit);
+      let opt = {
+        where: {'$Kelases.id_kelas$': idKelas},
+        offset: (pages - 1) * limits,
+        limit: limits,
+        include: [
+          {
+            model: Kelas, as: 'Kelases', required: true, attributes: ['id_kelas'],
+            through: { attributes: [] },
+          },
+          {model: Ref_jenis_ujian, as: 'RefJenis'},
+          {model: Paket_soal, as: 'PaketSoals'},
+        ],
+        order: [
+          ['created_at', 'DESC']
+        ]
+      }
+      const ujian = await paginator(Ujian, pages, limits, opt);
+      const vals = ujian.results.map((i) => {
+        return {
+          id_ujian: i.id_ujian,
+          jenis_ujian: i.RefJenis.jenis_ujian,
+          judul_ujian: i.judul_ujian,
+          tanggal_mulai: i.tanggal_mulai,
+          waktu_mulai: i.waktu_mulai,
+          status_ujian: i.status_ujian,
+          aktif: i.aktif,
+          paket_soal: i.PaketSoals
+        }
+      });
+      if (vals.length === 0) {vals.push('No Record...')}
+      CacheControl.getUjianKelas(req);
+      res.status(200).json({
+          next: ujian.next,
+          previous: ujian.previous,
+          ujian: vals
+      });
+    } catch (error) {
+      next(error);
+    }  
+  },
+
+  async kelasSearchUjian(req, res, next){
+    try {
+      let { find } = req.query;
+      const validator = ujianValidator(find);
+      const idKelas = req.params.id_kelas;
+      const pages = parseInt(req.query.page);
+      const limits = parseInt(req.query.limit);
+      let opt = {
+        where: { [Op.and]: [{'$Kelases.id_kelas$': idKelas}, {
+          [Op.or]: validator}]
+        },
+        offset: (pages - 1) * limits,
+        limit: limits,
+        include: [
+          {
+            model: Kelas, as: 'Kelases', required: true, attributes: ['id_kelas'],
+            through: { attributes: [] },
+          },
+          {model: Ref_jenis_ujian, as: 'RefJenis'},
+          {model: Paket_soal, as: 'PaketSoals', attributes: ['kode_paket']},
+        ],
+        order: [
+          ['created_at', 'DESC']
+        ]
+      }
+      const ujian = await paginator(Ujian, pages, limits, opt);
+      const vals = ujian.results.map((i) => {
+        return {
+          id_ujian: i.id_ujian,
+          jenis_ujian: i.RefJenis.jenis_ujian,
+          judul_ujian: i.judul_ujian,
+          tanggal_mulai: i.tanggal_mulai,
+          waktu_mulai: i.waktu_mulai,
+          status_ujian: i.status_ujian,
+          aktif: i.aktif
+        }
+      });
+      if (vals.length === 0) {vals.push('No Record...')}
+      CacheControl.getUjianKelas(req);
+      res.status(200).json({
+          next: ujian.next,
+          previous: ujian.previous,
+          ujian: vals
+      });
+    } catch (error) {
+      next(error);
+    }  
+  },
+
+  async kelasSetUjian(req, res, next){
+    try {
+      const { id_kelas } = req.params;
+      const { id_ujian } = req.body;
+      if(!id_ujian) throw createError.BadRequest('id ujian tidak boleh kosong!');
+      const kelas = await Kelas.findByPk(id_kelas);
+      kelas.addUjians(id_ujian);
+      CacheControl.postNewUjianKelas;
+      res.status(200).json({
+        success: true,
+        msg: `kelas berhasil direlasikan dengan ujian, ${id_ujian}`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async kelasPutUjian(req, res, next){
+    try {
+      const { id_kelas } = req.params;
+      const { id_ujian } = req.body;
+      if(!id_ujian) throw createError.BadRequest('id ujian tidak boleh kosong!');
+      const kelas = await Kelas.findByPk(id_kelas);
+      kelas.setUjians(id_ujian);
+      CacheControl.putUjianKelas;
+      res.status(200).json({
+        success: true,
+        msg: `relasi ujian pada kelas ${kelas.kode_seksi}, berhasil diubah`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async kelasDelUjian(req, res, next){
+    try {
+      const { id_kelas } = req.params;
+      const { id_ujian } = req.body;
+      if(!id_ujian) throw createError.BadRequest('id ujian tidak boleh kosong!');
+      const kelas = await Kelas.findByPk(id_kelas);
+      kelas.removeUjians(id_ujian);
+      CacheControl.deleteUjianKelas;
+      res.status(200).json({
+        success: true,
+        msg: `relasi ujian ${id_ujian} pada kelas ${kelas.kode_seksi}, berhasil dihapus`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+  // ujian operation
+  async getAllUjian(req, res, next){
+    try {
+      const pages = parseInt(req.query.page);
+      const limits = parseInt(req.query.limit);
+      let opt = {
+        offset: (pages - 1) * limits,
+        limit: limits,
+        include: [
+          {model: Ref_jenis_ujian, as: 'RefJenis'}
+        ],
+        order: [
+          ['created_at', 'DESC']
+        ]
+      }
+      const ujian = await paginator(Ujian, pages, limits, opt);
+      const vals = ujian.results.map((i) => {
+        return {
+          id_ujian: i.id_ujian,
+          jenis_ujian: i.RefJenis.jenis_ujian,
+          judul_ujian: i.judul_ujian,
+          tanggal_mulai: i.tanggal_mulai,
+          waktu_mulai: i.waktu_mulai,
+          status_ujian: i.status_ujian,
+          aktif: i.aktif
+        }
+      });
+      if (vals.length === 0) {vals.push('No Record...')}
+      CacheControl.getAllUjian(req);
+      res.status(200).json({
+          next: ujian.next,
+          previous: ujian.previous,
+          ujian: vals
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async searchUjian(req, res, next){
+    try {
+      let { find } = req.query;
+      const validator = ujianValidator(find);
+      const pages = parseInt(req.query.page);
+      const limits = parseInt(req.query.limit);
+      let opt = {
+        where: {[Op.or]: validator},
+        offset: (pages - 1) * limits,
+        limit: limits,
+        include: [
+          {model: Ref_jenis_ujian, as: 'RefJenis'},
+          {model: Paket_soal, as: 'PaketSoals', attributes: ['kode_paket']},
+        ],
+        order: [
+          ['created_at', 'DESC']
+        ]
+      }
+      const ujian = await paginator(Ujian, pages, limits, opt);
+      const vals = ujian.results.map((i) => {
+        return {
+          id_ujian: i.id_ujian,
+          jenis_ujian: i.RefJenis.jenis_ujian,
+          judul_ujian: i.judul_ujian,
+          tanggal_mulai: i.tanggal_mulai,
+          waktu_mulai: i.waktu_mulai,
+          status_ujian: i.status_ujian,
+          aktif: i.aktif
+        }
+      });
+      if (vals.length === 0) {vals.push('No Record...')}
+      CacheControl.getAllUjian(req);
+      res.status(200).json({
+          next: ujian.next,
+          previous: ujian.previous,
+          ujian: vals
+      });
+    } catch (error) {
+      next(error);
+    }  
+  },
+
+  async getUjian(req, res, next){
+    try {
+      const { id_ujian } = req.params;
+      const ujian = await Ujian.findOne({
+        where: {id_ujian: id_ujian},
+        include: [
+          {model: Paket_soal, as: 'PaketSoals'},
+          {model: Ref_jenis_ujian, as: 'RefJenis'},
+          {
+            model: Kelas, as: 'Kelases', attributes: ['id_kelas', 'kode_seksi'],
+            through: {attributes: []},
+          }
+        ]
+      });
+      if(!ujian) throw createError.NotFound('data ujian tidak ditemukan.');      
+      const data = {
+        id_ujian: ujian.id_ujian,
+        jenis_ujian: ujian.RefJenis.jenis_ujian,
+        judul_ujian: ujian.judul_ujian,
+        tanggal_mulai: ujian.tanggal_mulai,
+        waktu_mulai: ujian.waktu_mulai,
+        durasi_ujian: ujian.durasi_ujian,
+        durasi_per_soal: ujian.durasi_per_soal,
+        bobot_total: ujian.bobot_total,
+        deskripsi: ujian.deskripsi,
+        created_at: ujian.created_at,
+        updated_at: ujian.updated_at,
+        status: ujian.status,
+        aktif: ujian.aktif,
+        tipe_penilaian: ujian.tipe_penilaian,
+        paket_soal: ujian.PaketSoals,
+        relasi_kelas: ujian.Kelases
+      }
+      CacheControl.getUjian(req);
+      res.status(200).json(data);
+    } catch (error) {
+      next(error);
+    }
+  },  
+
+  async putUjian(req, res, next){
+    try {
+      const { tanggal_mulai, waktu_mulai, status, aktif, deskripsi } = req.body;
+      const { id_ujian } = req.params;
+      let updateVal = {
+        tanggal_mulai: tanggal_mulai,
+        waktu_mulai: waktu_mulai,
+        status: status,
+        aktif: aktif,
+        deskripsi: deskripsi,
+        updated_at: fn('NOW')
+      };
+      await Ujian.update(updateVal, {
+        where: { id_ujian: id_ujian }
+      });
+      CacheControl.putUjian;
+      res.status(200).json({
+        success: true,
+        msg: `data ujian ${id_ujian} berhasil diubah`
+      })
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async patchStatusUjian(req, res, next){
+    try {
+      const { id_ujian } = req.params;      
+      const status = req.body.status_ujian;
+      let updateVal = {
+        status_ujian: status,
+        updated_at: fn('NOW')
+      };        
+      await Ujian.update(updateVal, {
+        where: { id_ujian: id_ujian }
+      });
+      CacheControl.patchStatusUjian;
+      res.status(200).json({
+        success: true,
+        msg: `status ujian berhasil diubah`
+      })
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async patchKeaktifanUjian(req, res, next){
+    try {
+      const { id_ujian } = req.params;      
+      const aktivasi = await Ujian.findOne({
+        attributes:['id_ujian','aktif'],
+        where:{id_ujian:id_ujian}
+      });
+      var updateVal, keaktifan;
+      if(aktivasi.aktif === false){
+        updateVal = {
+          aktif: 1,
+          updated_at: fn('NOW')
+        };
+        keaktifan = 'di aktifkan';
+      } else {
+        updateVal = {
+          aktif: 0,
+          updated_at: fn('NOW')
+        };
+        keaktifan = 'di non-aktifkan';
+      }      
+      await Ujian.update(updateVal, {
+        where: { id_ujian: id_ujian }
+      });
+      CacheControl.patchKeaktifanUjian;
+      res.status(200).json({
+        success: true,
+        msg: `ujian berhasil ${keaktifan}`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deleteUjian(req, res, next){
+    try {
+      const { id_ujian } = req.params;
+      const ujian = await Ujian.findOne({
+        where: {id_ujian: id_ujian}
+      });
+      if (!ujian) { throw createError.NotFound('data ujian tidak ditemukan.')}
+      await Ujian.destroy({
+        where:{
+          id_ujian: ujian.id_ujian
+        }
+      });
+      CacheControl.deleteUjian;
+      res.status(200).json({
+        success: true,
+        msg: 'data berhasil dihapus'
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+  // paket-soal_mhs operation
+  async randomizePkSoal(req, res, next){
+    try {
+      const { id_kelas, id_paket } = req.body;
+      const kelasMhs = await Kelas.findOne({ 
+        where: {id_kelas: id_kelas}, include: {
+          model: Mahasiswa, as: 'Mahasiswas', attributes: ['id_mhs']
+        }
+      }).then((i) => { 
+        return i.Mahasiswas.map(({id_mhs}) => {return id_mhs})
+      });
+      shuffleArray(kelasMhs);
+      const mapped = kelasMhs.map((i) => {    
+        const randomPaket = Math.floor(Math.random() * id_paket.length);
+        const kdPaket = id_paket[randomPaket]
+        return {
+          id_paket: kdPaket,
+          id_mhs: i
+        }
+      });
+      await Rel_mahasiswa_paketsoal.bulkCreate(mapped);
+      CacheControl.postNewMhsPkSoal;
+      res.status(200).json({
+        success: true,
+        msg: `paket-soal berhasil direlasikan dengan mahasiswa pada kelas ${kelasMhs.kode_seksi}`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async pkSoalSetMhs(req, res, next){
+    try {
+      const { id_paket } = req.params;
+      const { id_mhs } = req.body;
+      if(!id_paket) throw createError.BadRequest('id paket tidak boleh kosong!');
+      const paketMhs = id_mhs.map((i) => {
+        return {
+          id_paket: id_paket,
+          id_mhs: i
+        }
+      });
+      await Rel_mahasiswa_paketsoal.bulkCreate(paketMhs);
+      CacheControl.postNewMhsPkSoal;
+      res.status(200).json({
+        success: true,
+        msg: `paket-soal berhasil direlasikan dengan mahasiswa, ${id_mhs}`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async pkSoalPutMhs(req, res, next){
+    try {
+      const { id_paket } = req.params;
+      const { id_mhs } = req.body;
+      if(!id_paket) throw createError.BadRequest('id paket tidak boleh kosong!');
+      const paketMhs = id_mhs.map((i) => {
+        return {
+          id_paket: id_paket,
+          id_mhs: i
+        }
+      });
+      await Rel_mahasiswa_paketsoal.bulkCreate(paketMhs, {
+        updateOnDuplicate: ['id_paket', 'id_mhs']
+      });
+      CacheControl.putMhsPkSoal;
+      res.status(200).json({
+        success: true,
+        msg: `relasi paket-soal mahasiswa berhasil diubah`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async pkSoalDelMhs(req, res, next){
+    try {
+      const { id_paket } = req.params;
+      const { id_mhs } = req.body;
+      if(!id_paket) throw createError.BadRequest('id paket tidak boleh kosong!');
+      await Rel_mahasiswa_paketsoal.destroy({ where:{[Op.and]: [
+        {id_paket: id_paket}, {id_mhs: id_mhs}]
+      }});
+      CacheControl.deleteMhsPkSoal;
+      res.status(200).json({
+        success: true,
+        msg: `relasi paket-soal mahasiswa berhasil diubah`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deletePaketSoal(req, res, next){
+    try {
+      const { id_paket } = req.params;
+      const paketExist = await Paket_soal.findOne({where: {id_paket: id_paket}});
+      if (!paketExist) throw createError.NotFound('data paket-soal tidak ditemukan.')    
+      paketExist.setSoals([]);
+      paketExist.setMahasiswas([]);
+      await Paket_soal.destroy({
+        where:{
+          id_paket: id_paket
+      }});
+      CacheControl.deletePaketSoal;
+      res.status(200).json({
+        success: true,
+        msg: 'data paket-soal berhasil dihapus'
+      });
     } catch (error) {
       next(error);
     }
@@ -1462,7 +2067,9 @@ module.exports = {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       const vals = await paginator(Lupa_pw, pages, limits);
-      res.send(vals);
+      if(vals.results.length === 0) vals.results.push('No record...');
+      CacheControl.getLupapw(req);
+      res.status(200).json(vals);
     } catch (error) {
       next(error);
     }
@@ -1470,21 +2077,19 @@ module.exports = {
 
   async resetPw(req, res, next) {
     try {
-        const { kode_reset } = req.params;
-        const getlupapw = await Lupa_pw.findByPk(kode_reset);
+        const { id_reset } = req.params;
+        const getlupapw = await Lupa_pw.findByPk(id_reset);
         const getUserdata = await getUser({username:getlupapw.username});
-
-        let updateVal = { password: await hashed(), updated_at: sequelize.fn('NOW')};
-
+        let updateVal = { password: await hashed(), updated_at: fn('NOW')};
         await User.update(updateVal, {
           where: { id: getUserdata.id }
         });
         await Lupa_pw.update({status: 'sudah'}, {
           where:{
-            kode_reset_pw: getlupapw.kode_reset_pw
+            id_reset_pw: getlupapw.id_reset_pw
           }
         });
-
+        CacheControl.resetPw;
         res.status(204).json({
           success: true,
           msg: 'password '+getUserdata.username+' menjadi default, '
@@ -1497,18 +2102,19 @@ module.exports = {
 
   async deleteLupapw(req, res, next) {
     try {
-        const { kode_reset } = req.params;
-        const getlupapw = await Lupa_pw.findByPk(kode_reset)
-        if (!getlupapw) { throw createError.NotFound('data tidak ditemukan')}
-        await Lupa_pw.destroy({
-          where:{
-            kode_reset_pw: getlupapw.kode_reset_pw
-          }
-        });
-        res.status(200).json({
-          success: true,
-          msg: 'data berhasil dihapus'
-        });
+      const { id_reset } = req.params;
+      const getlupapw = await Lupa_pw.findByPk(id_reset)
+      if (!getlupapw) { throw createError.NotFound('data lupa-pass tidak ditemukan.')}
+      await Lupa_pw.destroy({
+        where:{
+          id_reset_pw: getlupapw.id_reset_pw
+        }
+      });
+      CacheControl.deleteLupapw;
+      res.status(200).json({
+        success: true,
+        msg: 'data berhasil dihapus'
+      });
     } catch (error) {
       next(error);
     }
@@ -1518,17 +2124,13 @@ module.exports = {
     try {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      let val = await paginator(Pengumuman, pages, limits);
-      let vals = [];
-      if(val.results.length !== 0) {
-        vals.push(val.results) 
-      } else {
-        vals.push('no record...')
-      }
-      res.send({
-        next: val.next,
-        previous: val.previous,
-        pengumuman: vals
+      const vals = await paginator(Pengumuman, pages, limits);
+      if(vals.results.length === 0) vals.results.push('No record...');
+      CacheControl.getAllPengumuman(req);
+      res.status(200).json({
+        next: vals.next,
+        previous: vals.previous,
+        pengumuman: vals.results
       });
     } catch (error) {
       next(error);
@@ -1537,31 +2139,36 @@ module.exports = {
 
   async getPengumuman(req, res, next) {
     try {
-      const { kode_pengumuman } = req.params;
-      const val = await Pengumuman.findByPk(kode_pengumuman);
-      res.send(val)
+      const { id_pengumuman } = req.params;
+      const val = await Pengumuman.findByPk(id_pengumuman);
+      if(!val) throw createError.NotFound('data pengumuman tidak ditemukan.');
+      CacheControl.getPengumuman(req);
+      res.status(200).json(val);
     } catch (error) {
       next(error);
     }
   },
 
-  async tambahPengumuman(req, res, next) {
+  async setPengumuman(req, res, next) {
     try {
       const { pengumuman, status } = req.body;
-      const getPengummn = await Pengumuman.findOne({where:{pengumuman:pengumuman}});
+      const getPengummn = await Pengumuman.findOne({
+        attributes:['pengumuman'],
+        where:{pengumuman:pengumuman}
+      });
       if (getPengummn) {
         throw createError.Conflict('Pengumuman sudah terdaftar');
       } else if (!pengumuman) {
         throw createError.BadRequest('tolong diisi!');
       } else {
-        const pengummn = await Pengumuman.create({
+        await Pengumuman.create({
           pengumuman: pengumuman,
           status: status
         });
+        CacheControl.postNewPengumuman;
         res.status(200).json({
           success: true,
-          msg: 'pengumuman berhasil ditambahkan',
-          status: pengummn.status
+          msg: 'pengumuman berhasil ditambahkan'
         });
       }
     } catch (error) {
@@ -1569,9 +2176,9 @@ module.exports = {
     }
   },
 
-  async ubahPengumuman(req, res, next) {
+  async putPengumuman(req, res, next) {
     try {
-      const { kode_pengumuman } = req.params;
+      const { id_pengumuman } = req.params;
       const { pengumuman, status } = req.body;
       if (!pengumuman) {
         throw createError.BadRequest('tolong diisi!');
@@ -1581,13 +2188,12 @@ module.exports = {
             status: status
         };
         await Pengumuman.update(updateVal, {
-          where: { kode_pengumuman: kode_pengumuman }
+          where: { id_pengumuman: id_pengumuman }
         });
-
+        CacheControl.putPengumuman;
         res.status(200).json({
           success: true,
-          msg: 'pengumuman berhasil diubah',
-          kode_pengumuman: kode_pengumuman
+          msg: 'data pengumuman berhasil diubah'
         });
       }
     } catch (error) {
@@ -1595,16 +2201,17 @@ module.exports = {
     }
   },
 
-  async hapusPengumuman(req, res, next) {
+  async deletePengumuman(req, res, next) {
     try {
-        const { kode_pengumuman } = req.params;
-        const getpengumuman = await Pengumuman.findByPk(kode_pengumuman);
-        if (!getpengumuman) { throw createError.NotFound('data tidak ditemukan')}
+        const { id_pengumuman } = req.params;
+        const getpengumuman = await Pengumuman.findByPk(id_pengumuman);
+        if (!getpengumuman) { throw createError.NotFound('data pengumuman tidak ditemukan.')}
         await Pengumuman.destroy({
           where:{
-            kode_pengumuman: getpengumuman.kode_pengumuman
+            id_pengumuman: getpengumuman.id_pengumuman
           }
         });
+        CacheControl.deletePengumuman;
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -1618,42 +2225,49 @@ module.exports = {
     try {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
-      let val = await paginator(Captcha, pages, limits);
-      let vals = [];
-      if(val.results.length !== 0) {
-        vals.push(val.results) 
-      } else {
-        vals.push('no record...')
-      }
-      res.send({
-        next: val.next,
-        previous: val.previous,
-        captcha: vals
+      const vals = await paginator(Captcha, pages, limits);
+      if(vals.results.length === 0) vals.results.push('No record...');
+      CacheControl.getAllCaptcha(req);
+      res.status(200).json({
+        next: vals.next,
+        previous: vals.previous,
+        captcha: vals.results
       });
-      res.send(vals);
     } catch (error) {
       next(error);
     }
   },
 
-  async tambahCaptcha (req, res, next) {
+  async getCaptcha (req, res, next) {
+    try {
+      const idCaptcha = req.params.id_captcha;
+      const captcha = await Captcha.findByPk(idCaptcha);
+      CacheControl.getCaptcha;
+      res.status(200).json(captcha);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async setCaptcha (req, res, next) {
     try {
       const { pertanyaan, jawaban } = req.body;
-      const getCaptcha = await Captcha.findOne({where:{pertanyaan:pertanyaan}});
-      const getCaptcha2 = await Captcha.findOne({where:{jawaban:jawaban}});
-      if (getCaptcha&&getCaptcha2) {
-        throw createError.Conflict('Pertanyaan dan jawaban sudah terdaftar');
+      const getCaptcha = await Captcha.findOne({where:{[Op.or]: [
+        {pertanyaan:pertanyaan}, {jawaban:jawaban}]
+      }});
+      if (getCaptcha) {
+        throw createError.Conflict('Pertanyaan dan/atau jawaban sudah terdaftar');
       } else if (!pertanyaan&&!jawaban) {
         throw createError.BadRequest('tolong diisi!');
       } else {
-        const captcha = await Captcha.create({
+        await Captcha.create({
           pertanyaan: pertanyaan,
           jawaban: jawaban
         });
+        CacheControl.postNewCaptcha;
         res.status(200).json({
           success: true,
-          msg: 'captcha berhasil ditambahkan',
-          captcha: captcha
+          msg: 'captcha berhasil ditambahkan'
         });
       }
     } catch (error) {
@@ -1661,19 +2275,44 @@ module.exports = {
     }
   },
 
-  async hapusCaptcha(req, res, next) {
+  async putCaptcha (req, res, next) {
     try {
-        const { kode_captcha } = req.params;
-        const getCpt = await Captcha.findByPk(kode_captcha);
-        if (!getCpt) { throw createError.NotFound('data tidak ditemukan')}
-        await Captcha.destroy({
-          where:{
-            kode_captcha: getCpt.kode_captcha
-        }});
+      const idCaptcha = req.params.id_captcha;
+      const { pertanyaan, jawaban } = req.body;
+      if (!pertanyaan&&!jawaban) {
+        throw createError.BadRequest('tolong diisi!');
+      } else {
+        await Captcha.update({
+          pertanyaan: pertanyaan,
+          jawaban: jawaban
+        }, {
+          where: { id_captcha: idCaptcha }
+        });
+        CacheControl.putCaptcha;
         res.status(200).json({
           success: true,
-          msg: 'data berhasil dihapus'
+          msg: 'captcha berhasil diubah'
         });
+      }
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deleteCaptcha(req, res, next) {
+    try {
+      const { id_captcha } = req.params;
+      const getCpt = await Captcha.findByPk(id_captcha);
+      if (!getCpt) { throw createError.NotFound('data captcha tidak ditemukan.')}
+      await Captcha.destroy({
+        where:{
+          id_captcha: getCpt.id_captcha
+      }});
+      CacheControl.deleteCaptcha;
+      res.status(200).json({
+        success: true,
+        msg: 'data berhasil dihapus'
+      });
     } catch (error) {
       next(error);
     }
@@ -1684,26 +2323,27 @@ module.exports = {
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       const vals = await paginator(Ref_semester, pages, limits);
-      res.send(vals);
+      CacheControl.getAllSemester(req);
+      res.status(200).json(vals);
     } catch (error) {
       next(error);
     }
   },
 
-  async tambahSemester (req, res, next) {
+  async setSemester (req, res, next) {
     try {
       const { semester } = req.body;
       const getSemester = await Ref_semester.findOne({where:{semester:semester}});
       if (getSemester) {
         throw createError.Conflict('Semester sudah terdaftar');
       } else {
-        const smstr = await Ref_semester.create({
+        await Ref_semester.create({
           semester:semester
         });
+        CacheControl.postNewSemester;
         res.status(200).json({
           success: true,
-          msg: 'semester berhasil ditambahkan',
-          semester: smstr
+          msg: 'semester berhasil ditambahkan'
         });
       }
     } catch (error) {
@@ -1711,9 +2351,9 @@ module.exports = {
     }
   },
 
-  async ubahSemester(req, res, next) {
+  async putSemester(req, res, next) {
     try {
-      const { kode_semester } = req.params;
+      const { id_semester } = req.params;
       const { semester } = req.body;
       if (!semester) {
         throw createError.BadRequest('tolong diisi!');
@@ -1722,13 +2362,12 @@ module.exports = {
             semester: semester,
         };
         await Ref_semester.update(updateVal, {
-          where: { kode_semester: kode_semester }
+          where: { id_semester: id_semester }
         });
-
+        CacheControl.putSemester;
         res.status(200).json({
           success: true,
-          msg: 'semester berhasil diubah',
-          kode_semester: kode_semester
+          msg: 'data semester berhasil diubah'
         });
       }
     } catch (error) {
@@ -1736,40 +2375,19 @@ module.exports = {
     }
   },
 
-  async hapusSemester(req, res, next) {
+  async deleteSemester(req, res, next) {
     try {
-        const { kode_semester } = req.params;
+        const { id_semester } = req.params;
         const getSms = await Ref_semester.findOne({
-          where: {kode_semester: kode_semester},
-          include: {
-            model: Matakuliah, as: 'Matkul',
-            include: { 
-              model: Kelas, as: 'Kelas'             
-            }
-          }
+          where: {id_semester: id_semester}
         });
-        let temp = [];
-        if (!getSms) { throw createError.NotFound('data tidak ditemukan')}
+        if (!getSms) { throw createError.NotFound('data semester tidak ditemukan.')}
         await Ref_semester.destroy({
           where:{
-            kode_semester: getSms.kode_semester
+            id_semester: getSms.id_semester
           }
         });
-        for(let i of getSms.Matkul){
-          temp.push(i.Kelas)
-          await Matakuliah.destroy({
-            where:{
-              kode_matkul: i.kode_matkul
-            }
-          });
-        }
-        for (let j of temp.flat()){
-          await Kelas.destroy({
-            where:{
-              kode_seksi: j.kode_seksi
-            }
-          });
-        }
+        CacheControl.deleteSemester;
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -1778,4 +2396,105 @@ module.exports = {
       next(error);
     }
   },
+  /* Notifikasi operation methods*/
+  async getNotifikasiAll(req, res, next) {
+    try {
+      const pages = parseInt(req.query.page);
+      const limits = parseInt(req.query.limit);
+      const vals = await paginator(Notifikasi, pages, limits);
+      if(vals.results.length === 0) vals.results.push('No record...');
+      CacheControl.getAllNotifikasi(req);
+      res.status(200).json({
+        next: vals.next,
+        previous: vals.previous,
+        notifikasi: vals.results
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getNotifikasi(req, res, next) {
+    try {
+      const { id_notif } = req.params;
+      const val = await Notifikasi.findByPk(id_notif);
+      if(!val) throw createError.NotFound('data notifikasi tidak ditemukan.');
+      CacheControl.getNotifikasiAdm(req);
+      res.status(200).json(val)
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async setNotifikasi(req, res, next) {
+    try {
+      const { id_penerima, pesan } = req.body;
+      const userPenerima = await User.findOne({
+        attributes: ['id'],
+        where: { id: id_penerima }
+      });
+      if(!userPenerima) throw createError.NotFound('user tidak ditemukan.');
+      const admin = await req.user;
+      await Notifikasi.create({
+        id_pengirim: admin.id,
+        id_penerima: userPenerima.id,
+        notifikasi: pesan,
+        created_at: fn('NOW')
+      });
+      CacheControl.postNewNotifikasi;
+      res.status(200).json({
+        success: true,
+        msg: 'notifikasi berhasil dikirim.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async putNotifikasi(req, res, next) {
+    try {
+      const { id_penerima, pesan } = req.body;
+      const idNotif = req.params.id_notif;
+      const userPenerima = await User.findOne({
+        attributes: ['id'],
+        where: { id: id_penerima }
+      });
+      if(!userPenerima) throw createError.NotFound('user tidak ditemukan.');
+      // const admin = await req.user;
+      let updateVal = {
+        // pengirim: admin.id,
+        penerima: userPenerima.id,
+        notifikasi: pesan,
+        updated_at: fn('NOW')
+      }
+      await Notifikasi.update( updateVal, {
+        where: {id_notif: idNotif}
+      });
+      CacheControl.putNotifikasi;
+      res.status(200).json({
+        success: true,
+        msg: 'notifikasi berhasil diubah'
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deleteNotifikasi(req, res, next) {
+    try {
+      const idNotif = req.params.id_notif;
+      const getNotif = await Notifikasi.findByPk(idNotif);
+      if (!getNotif) { throw createError.NotFound('data notifikasi tidak ditemukan.')}
+      await Notifikasi.destroy({
+        where: {id_notif: idNotif}
+      });
+      CacheControl.deleteNotifikasi;
+      res.status(200).json({
+        success: true,
+        msg: 'data notifikasi berhasil dihapus'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

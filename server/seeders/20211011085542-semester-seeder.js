@@ -7,9 +7,6 @@ module.exports = {
         semester: null
       },
       {
-        semester: '118'
-      },
-      {
         semester: '119'
       },
       {
@@ -23,6 +20,9 @@ module.exports = {
       },
       {
         semester: '123'
+      },
+      {
+        semester: '124'
       },
     ]);
   },
