@@ -21,8 +21,9 @@ require('./config/passport')(passport);
  *  (Heroku, Bluemix, AWS if you use an ELB, custom Nginx setup, etc);
  *  see https://expressjs.com/en/guide/behind-proxies.html
  * 
- *  app.set('trust proxy', 1);
+ *  
  */
+app.set('trust proxy', 1);
 app.engine('.hbs', engine({
     defaultLayout: false,
     extname: '.hbs',
