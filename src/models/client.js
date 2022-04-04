@@ -12,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         client_url: { 
-            type: DataTypes.STRING(25), 
+            type: DataTypes.STRING(40), 
             unique: true,
             allowNull: false
         },

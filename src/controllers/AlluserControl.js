@@ -75,7 +75,7 @@ module.exports = {
         await User.update(updateVal,{
             where: { id: id }
         });
-        CacheControl.postProfilePic;
+        CacheControl.postProfilePic();
         res.status(200).json({
             success: true,
             msg: 'Foto berhasil diubah.'
@@ -224,10 +224,11 @@ module.exports = {
     }
   },
 
-  async cariKelas(req, res, next) {
+  async searchKelas(req, res, next) {
     try {
       let { find } = req.query;
       const validator = kelasValidator(find);
+      if (validator instanceof createError) throw validator;
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {        
@@ -458,7 +459,7 @@ module.exports = {
         notifikasi: pesan,
         created_at: fn('NOW')
       });
-      CacheControl.postNotifikasi;
+      CacheControl.postNotifikasi();
       res.sendStatus(204);
     } catch (error) {
       next(error);
@@ -535,7 +536,7 @@ module.exports = {
       await Rel_mahasiswa_paketsoal.bulkCreate(data, {
         updateOnDuplicate: ['id_mhs', 'id_paket', 'nilai_total']
       });
-      CacheControl.postNilaiAuto;
+      CacheControl.postNilaiAuto();
       res.sendStatus(204);
     } catch (error) {
       next(error);

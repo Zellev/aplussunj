@@ -5,11 +5,11 @@ const apicache = require('apicache');
 const getAllClient = (req) => { return req.apicacheGroup = 'client-all'};
 const getCaptcha = (req) => { return req.apicacheGroup = 'captcha'};
 //post
-const postClient = apicache.clear(['client-all']);
+const postClient = () => {return apicache.clear(['client-all'])};
 //put
-const putClient = apicache.clear(['client-all']);
+const putClient = () => {return apicache.clear('client-all')};
 //delete
-const deleteClient = apicache.clear(['client-all']);
+const deleteClient = () => {return apicache.clear(['client-all'])};
 
 //AllUserController
 //get
@@ -26,10 +26,11 @@ const getKelompokMatakuliah = (req) => { return req.apicacheGroup = 'kelompok-ma
 const getPeminatan = (req) => { return req.apicacheGroup = 'peminatan'};
 const getSemester = (req) => { return req.apicacheGroup = 'semester'};
 //post
-const postProfilePic = apicache.clear(['profil-dosen', 'myprofile-dosen', 'profil-mhs', 'myprofile-mhs']);
-const postNotifikasi = apicache.clear(['notifikasi']);
-const postNilaiAuto = apicache.clear(['nilai-total-mhs', 'nilai-akhir']); // getter nilai ~
-const postNewAdmin = apicache.clear(['user-all', 'user', 'dashboard-admin']);
+const postProfilePic = () => {return apicache.clear(['profil-dosen', 'myprofile-dosen', 
+'profil-mhs', 'myprofile-mhs'])};
+const postNotifikasi = () => {return apicache.clear(['notifikasi'])};
+const postNilaiAuto = () => {return apicache.clear(['nilai-total-mhs', 'nilai-akhir'])}; // getter nilai ~
+const postNewAdmin = () => {return apicache.clear(['user-all', 'user', 'dashboard-admin'])};
 
 //AdminController
 //get
@@ -53,63 +54,63 @@ const getAllSemester = (req) => { return req.apicacheGroup = 'semester-all'};
 const getAllNotifikasi = (req) => { return req.apicacheGroup = 'notifikasi-all'};
 const getNotifikasiAdm = (req) => { return req.apicacheGroup = 'notifikasi-admin'};
 //post
-const postNewUser = apicache.clear(['user-all', 'dosen-all', 'mhs-all', 'dashboard-admin']);
-const postNewMatkul = apicache.clear(['dashboard-admin', 'matkul-all', 'matkul']);
-const postNewKelas = apicache.clear(['kelas-all', 'kelas']);
-const postNewMhsKelas = apicache.clear(['mhs-kelas']);
-const postNewDosenKelas = apicache.clear(['dosen-kelas', 'dashboard-dosen', 'status-dosen']);
-const postNewUjianKelas = apicache.clear(['ujian-kelas', 'kelas', 'dashboard-dosen', 'status-dosen']);
-const postNewMhsPkSoal = apicache.clear(['paket-soal-mhs']); // post mhs to pksoal
-const postNewPengumuman = apicache.clear(['pengumuman-all', 'pengumuman']);
-const postNewCaptcha = apicache.clear(['captcha-all', 'captcha']);
-const postNewSemester = apicache.clear(['semester-all', 'semester']);
-const postNewNotifikasi = apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi']);
+const postNewUser = () => {return apicache.clear(['user-all', 'dosen-all', 'mhs-all', 'dashboard-admin'])};
+const postNewMatkul = () => {return apicache.clear(['dashboard-admin', 'matkul-all', 'matkul'])};
+const postNewKelas = () => {return apicache.clear(['kelas-all', 'kelas'])};
+const postNewMhsKelas = () => {return apicache.clear(['mhs-kelas'])};
+const postNewDosenKelas = () => {return apicache.clear(['dosen-kelas', 'dashboard-dosen', 'status-dosen'])};
+const postNewUjianKelas = () => {return apicache.clear(['ujian-kelas', 'kelas', 'dashboard-dosen', 'status-dosen'])};
+const postNewMhsPkSoal = () => {return apicache.clear(['paket-soal-mhs'])}; // post mhs to pksoal
+const postNewPengumuman = () => {return apicache.clear(['pengumuman-all', 'pengumuman'])};
+const postNewCaptcha = () => {return apicache.clear(['captcha-all', 'captcha'])};
+const postNewSemester = () => {return apicache.clear(['semester-all', 'semester'])};
+const postNewNotifikasi = () => {return apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi'])};
 //put
-const putUser = apicache.clear(['user-all', 'user', 'profil-dosen', 'myprofile-dosen', 'profil-mhs', 
-'myprofile-mhs', 'dosen-all', 'mhs-all']);
-const putmyProfileAdmin = apicache.clear(['myprofile-admin', 'user']);
-const putDosen = apicache.clear(['dosen-all', 'profil-dosen', 'myprofile-dosen', 'dosen-kelas']);
-const putMhs = apicache.clear(['mhs-all', 'profil-mhs', 'myprofile-mhs', 'mhs-kelas']);
-const putMatkul = apicache.clear(['matkul-all', 'matkul', 'matkul-dosen-all', 'matkul-dosen']);
-const putKelas = apicache.clear(['kelas-all', 'kelas', 'dashboard-dosen', 'kelas-dosen-all', 'dashboard-mhs',
-'kelas-mhs-all']);
-const putMhsKelas = apicache.clear(['mhs-kelas']);
-const putDosenKelas = apicache.clear(['dosen-kelas', 'dashboard-dosen', 'status-dosen', 'kelas-dosen-all', 
-'kelas-mhs-all']);
-const putUjianKelas = apicache.clear(['ujian-kelas', 'dashboard-dosen', 'status-dosen']);
-const putUjian = apicache.clear(['ujian-kelas', 'ujian-all', 'ujian', 'kelas', 'dashboard-dosen', 'ujian-mhs']);
-const putMhsPkSoal = apicache.clear(['paket-soal-mhs']); // put mhs in pksoal
-const putPengumuman = apicache.clear(['pengumuman-all', 'pengumuman']);
-const putCaptcha = apicache.clear(['captcha-all', 'captcha']);
-const putSemester = apicache.clear(['semester-all', 'semester']);
-const putNotifikasi = apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi']);
+const putUser = () => {return apicache.clear(['user-all', 'user', 'profil-dosen', 'myprofile-dosen', 'profil-mhs', 
+'myprofile-mhs', 'dosen-all', 'mhs-all'])};
+const putmyProfileAdmin = () => {return apicache.clear(['myprofile-admin', 'user'])};
+const putDosen = () => {return apicache.clear(['dosen-all', 'profil-dosen', 'myprofile-dosen', 'dosen-kelas'])};
+const putMhs = () => {return apicache.clear(['mhs-all', 'profil-mhs', 'myprofile-mhs', 'mhs-kelas'])};
+const putMatkul = () => {return apicache.clear(['matkul-all', 'matkul', 'matkul-dosen-all', 'matkul-dosen'])};
+const putKelas = () => {return apicache.clear(['kelas-all', 'kelas', 'dashboard-dosen', 'kelas-dosen-all', 'dashboard-mhs',
+'kelas-mhs-all'])};
+const putMhsKelas = () => {return apicache.clear(['mhs-kelas'])};
+const putDosenKelas = () => {return apicache.clear(['dosen-kelas', 'dashboard-dosen', 'status-dosen', 'kelas-dosen-all', 
+'kelas-mhs-all'])};
+const putUjianKelas = () => {return apicache.clear(['ujian-kelas', 'dashboard-dosen', 'status-dosen'])};
+const putUjian = () => {return apicache.clear(['ujian-kelas', 'ujian-all', 'ujian', 'kelas', 'dashboard-dosen', 'ujian-mhs'])};
+const putMhsPkSoal = () => {return apicache.clear(['paket-soal-mhs'])}; // put mhs in pksoal
+const putPengumuman = () => {return apicache.clear(['pengumuman-all', 'pengumuman'])};
+const putCaptcha = () => {return apicache.clear(['captcha-all', 'captcha'])};
+const putSemester = () => {return apicache.clear(['semester-all', 'semester'])};
+const putNotifikasi = () => {return apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi'])};
 //patch
-const patchStatusUjian = apicache.clear(['ujian-kelas', 'ujian-all', 'ujian', 'kelas', 'dashboard-dosen', 
-'dashboard-mhs', 'ujian-mhs', 'ujian-mhs-all-bystatus']);
-const patchKeaktifanUjian = apicache.clear(['ujian-kelas', 'ujian-all', 'ujian', 'dashboard-dosen', 'dashboard-mhs', 
-'ujian-mhs', 'ujian-mhs-all-S', 'ujian-mhs-all-L', 'ujian-mhs-all-bystatus']);
-const resetPw = apicache.clear(['lupapw']);
+const patchStatusUjian = () => {return apicache.clear(['ujian-kelas', 'ujian-all', 'ujian', 'kelas', 'dashboard-dosen', 
+'dashboard-mhs', 'ujian-mhs', 'ujian-mhs-all-bystatus'])};
+const patchKeaktifanUjian = () => {return apicache.clear(['ujian-kelas', 'ujian-all', 'ujian', 'dashboard-dosen', 'dashboard-mhs', 
+'ujian-mhs', 'ujian-mhs-all-S', 'ujian-mhs-all-L', 'ujian-mhs-all-bystatus'])};
+const resetPw = () => {return apicache.clear(['lupapw'])};
 //delete
-const deleteUser = apicache.clear(['dashboard-admin', 'user', 'user-all', 'dosen-all', 'mhs-all', 'profil-dosen', 
-'myprofile-dosen', 'profil-mhs', 'myprofile-mhs', 'mhs-kelas', 'dosen-kelas']);
-const deleteDosen = apicache.clear(['user-all', 'dosen-all', 'profil-dosen', 'myprofile-dosen', 'dosen-kelas']);
-const deleteMhs = apicache.clear(['user-all', 'mhs-all', 'profil-mhs', 'myprofile-mhs', 'mhs-kelas']);
-const deleteMatkul = apicache.clear(['dashboard-admin', 'matkul-all', 'matkul', 'matkul-dosen-all', 'matkul-dosen']);
-const deleteKelas = apicache.clear(['kelas-all', 'kelas', 'dashboard-dosen', 'status-dosen', 'matkul-dosen-all',
-'matkul-dosen', 'kelas-dosen-all', 'dashboard-mhs', 'kelas-mhs-all']);
-const deleteMhsKelas = apicache.clear(['mhs-kelas']);
-const deleteDosenKelas = apicache.clear(['dosen-kelas', 'dashboard-dosen', 'status-dosen', 'kelas-dosen-all', 
-'kelas-mhs-all']);
-const deleteUjianKelas = apicache.clear(['ujian-kelas', 'dashboard-dosen', 'status-dosen']);
-const deleteUjian = apicache.clear(['ujian-kelas', 'ujian-all', 'ujian', 'kelas', 'dashboard-dosen', 'status-dosen', 
-'ujian-mhs']);
-const deletePaketSoal = apicache.clear(['ujian-kelas', 'paket-soal', 'paket-soal-mhs', 'ujian', 'soal-paket-soal']);
-const deleteMhsPkSoal = apicache.clear(['paket-soal-mhs']); // delete mhs in pksoal
-const deleteLupapw = apicache.clear(['lupapw']);
-const deletePengumuman = apicache.clear(['pengumuman-all', 'pengumuman']);
-const deleteCaptcha = apicache.clear(['captcha-all', 'captcha']);
-const deleteSemester = apicache.clear(['semester-all', 'semester']);
-const deleteNotifikasi = apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi']);
+const deleteUser = () => {return apicache.clear(['dashboard-admin', 'user', 'user-all', 'dosen-all', 'mhs-all', 'profil-dosen', 
+'myprofile-dosen', 'profil-mhs', 'myprofile-mhs', 'mhs-kelas', 'dosen-kelas'])};
+const deleteDosen = () => {return apicache.clear(['user-all', 'dosen-all', 'profil-dosen', 'myprofile-dosen', 'dosen-kelas'])};
+const deleteMhs = () => {return apicache.clear(['user-all', 'mhs-all', 'profil-mhs', 'myprofile-mhs', 'mhs-kelas'])};
+const deleteMatkul = () => {return apicache.clear(['dashboard-admin', 'matkul-all', 'matkul', 'matkul-dosen-all', 'matkul-dosen'])};
+const deleteKelas = () => {return apicache.clear(['kelas-all', 'kelas', 'dashboard-dosen', 'status-dosen', 'matkul-dosen-all',
+'matkul-dosen', 'kelas-dosen-all', 'dashboard-mhs', 'kelas-mhs-all'])};
+const deleteMhsKelas = () => {return apicache.clear(['mhs-kelas'])};
+const deleteDosenKelas = () => {return apicache.clear(['dosen-kelas', 'dashboard-dosen', 'status-dosen', 'kelas-dosen-all', 
+'kelas-mhs-all'])};
+const deleteUjianKelas = () => {return apicache.clear(['ujian-kelas', 'dashboard-dosen', 'status-dosen'])};
+const deleteUjian = () => {return apicache.clear(['ujian-kelas', 'ujian-all', 'ujian', 'kelas', 'dashboard-dosen', 'status-dosen', 
+'ujian-mhs'])};
+const deletePaketSoal = () => {return apicache.clear(['ujian-kelas', 'paket-soal', 'paket-soal-mhs', 'ujian', 'soal-paket-soal'])};
+const deleteMhsPkSoal = () => {return apicache.clear(['paket-soal-mhs'])}; // delete mhs in pksoal
+const deleteLupapw = () => {return apicache.clear(['lupapw'])};
+const deletePengumuman = () => {return apicache.clear(['pengumuman-all', 'pengumuman'])};
+const deleteCaptcha = () => {return apicache.clear(['captcha-all', 'captcha'])};
+const deleteSemester = () => {return apicache.clear(['semester-all', 'semester'])};
+const deleteNotifikasi = () => {return apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi'])};
 
 //DosenController
 //get
@@ -130,31 +131,31 @@ const getAllSoal = (req) => { return req.apicacheGroup = 'soal-all'};
 const getSoal = (req) => { return req.apicacheGroup = 'soal'};
 const getAllSoalMk = (req) => { return req.apicacheGroup = 'soal-matkul-all'}; 
 //post
-const postNewUjianDraft = apicache.clear(['ujian-all', 'ujian', 'ujian-kelas', 'dashboard-dosen', 'status-dosen']);
-const postNewUjianAktif = apicache.clear(['ujian-all', 'ujian', 'ujian-kelas', 'kelas', 'dashboard-dosen', 'status-dosen']);
-const postNewPaketSoal = apicache.clear(['ujian', 'soal-paket-soal', 'paket-soal', 'paket-soal-mhs']);
-const postNewSoalPkSoal = apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian']);
-const postNewNilaiTotal = apicache.clear(['nilai-total-mhs', 'nilai-akhir']);
-const postNewNilaiUjian = apicache.clear(['jawaban', 'jawaban-soal', 'jawaban-soal-anon', 'nilai-total-mhs', 'ujian-mhs', 
-'nilai-akhir']);
-const postNewSoal = apicache.clear(['soal-all', 'soal-paket-soal', 'soal-matkul-all']);
-const postputNilaiJawaban = apicache.clear(['jawaban', 'jawaban-soal', 'jawaban-soal-anon']);
+const postNewUjianDraft = () => { return apicache.clear(['ujian-all', 'ujian', 'ujian-kelas', 'dashboard-dosen', 'status-dosen'])};
+const postNewUjianAktif = () => { return apicache.clear(['ujian-all', 'ujian', 'ujian-kelas', 'kelas', 'dashboard-dosen', 'status-dosen'])};
+const postNewPaketSoal = () => { return apicache.clear(['ujian', 'soal-paket-soal', 'paket-soal', 'paket-soal-mhs'])};
+const postNewSoalPkSoal = () => { return apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian'])};
+const postNewNilaiTotal = () => { return apicache.clear(['nilai-total-mhs', 'nilai-akhir'])};
+const postNewNilaiUjian = () => { return apicache.clear(['jawaban', 'jawaban-soal', 'jawaban-soal-anon', 'nilai-total-mhs', 'ujian-mhs', 
+'nilai-akhir'])};
+const postNewSoal = () => { return apicache.clear(['soal-all', 'soal-paket-soal', 'soal-matkul-all'])};
+const postputNilaiJawaban = () => { return apicache.clear(['jawaban', 'jawaban-soal', 'jawaban-soal-anon'])};
 //put
-const putmyProfileDosen = apicache.clear(['myprofile-dosen', 'profil-dosen', 'user', 'user-all']);
-const putSoalPkSoal = apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian']);
-const putSoal = apicache.clear(['soal-all', 'soal', 'soal-paket-soal', 'soal-matkul-all']);
+const putmyProfileDosen = () => { return apicache.clear(['myprofile-dosen', 'profil-dosen', 'user', 'user-all'])};
+const putSoalPkSoal = () => { return apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian'])};
+const putSoal = () => { return apicache.clear(['soal-all', 'soal', 'soal-paket-soal', 'soal-matkul-all'])};
 //patch
-const patchKeaktifanPkSoal = apicache.clear(['ujian-kelas', 'paket-soal', 'paket-soal-mhs', 'ujian', 'soal-paket-soal', 
-'soal-penilaian', 'ujian-mhs-all-bystatus']);
-const patchBobotSoal = apicache.clear(['soal-paket-soal', 'soal-penilaian', 'soal-mhs']);
-const patchKunciSoal = apicache.clear(['soal-paket-soal', 'soal-penilaian', 'soal-mhs']);
-const patchGambarSoal = apicache.clear(['soal', 'soal-paket-soal', 'soal-penilaian']);
-const patchAudioSoal = apicache.clear(['soal', 'soal-paket-soal', 'soal-penilaian']);
-const patchVideoSoal = apicache.clear(['soal', 'soal-paket-soal', 'soal-penilaian']);
-const patchStatusSoal = apicache.clear(['soal-all', 'soal', 'soal-paket-soal', 'soal-penilaian', 'soal-mhs']);
+const patchKeaktifanPkSoal = () => { return apicache.clear(['ujian-kelas', 'paket-soal', 'paket-soal-mhs', 'ujian', 'soal-paket-soal', 
+'soal-penilaian', 'ujian-mhs-all-bystatus'])};
+const patchBobotSoal = () => { return apicache.clear(['soal-paket-soal', 'soal-penilaian', 'soal-mhs'])};
+const patchKunciSoal = () => { return apicache.clear(['soal-paket-soal', 'soal-penilaian', 'soal-mhs'])};
+const patchGambarSoal = () => { return apicache.clear(['soal', 'soal-paket-soal', 'soal-penilaian'])};
+const patchAudioSoal = () => { return apicache.clear(['soal', 'soal-paket-soal', 'soal-penilaian'])};
+const patchVideoSoal = () => { return apicache.clear(['soal', 'soal-paket-soal', 'soal-penilaian'])};
+const patchStatusSoal = () => { return apicache.clear(['soal-all', 'soal', 'soal-paket-soal', 'soal-penilaian', 'soal-mhs'])};
 //delete
-const deleteSoalPkSoal = apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian']);
-const deleteSoal = apicache.clear(['soal-all', 'soal', 'soal-paket-soal', 'soal-penilaian']);
+const deleteSoalPkSoal = () => { return apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian'])};
+const deleteSoal = () => { return apicache.clear(['soal-all', 'soal', 'soal-paket-soal', 'soal-penilaian'])};
 
 //MhsController
 //get
@@ -169,18 +170,18 @@ const getSoalMhs = (req) => { return req.apicacheGroup = 'soal-mhs'};
 const getAllJawabanMhs = (req) => { return req.apicacheGroup = 'jawaban-mhs'};
 const getNilaiAkhir = (req) => { return req.apicacheGroup = 'nilai-akhir'};
 //post
-const postKelasMhs = apicache.clear(['kelas-mhs-all']);
-const postWaktuMulai = apicache.clear(['paket-soal-mhs', 'nilai-total-mhs']);
-const postWaktuSelesai = apicache.clear(['paket-soal-mhs', 'nilai-total-mhs']);
-const postPaketMhs = apicache.clear(['paket-soal-mhs', 'dashboard-mhs']);
-const postNewJawaban = apicache.clear(['jawaban-mhs', 'jawaban-soal-anon', 'jawaban-soal', 'nilai-total-mhs']);
+const postKelasMhs = () => {return apicache.clear(['kelas-mhs-all'])};
+const postWaktuMulai = () => {return apicache.clear(['paket-soal-mhs', 'nilai-total-mhs'])};
+const postWaktuSelesai = () => {return apicache.clear(['paket-soal-mhs', 'nilai-total-mhs'])};
+const postPaketMhs = () => {return apicache.clear(['paket-soal-mhs', 'dashboard-mhs'])};
+const postNewJawaban = () => {return apicache.clear(['jawaban-mhs', 'jawaban-soal-anon', 'jawaban-soal', 'nilai-total-mhs'])};
 //put
-const putmyProfileMhs = apicache.clear(['myprofile-mhs', 'profil-mhs', 'user', 'user-all']);
-const putKelasMhs = apicache.clear(['kelas-mhs-all']);
-const putJawaban = apicache.clear(['jawaban-mhs', 'jawaban-soal-anon', 'jawaban-soal', 'nilai-total-mhs']);
+const putmyProfileMhs = () => {return apicache.clear(['myprofile-mhs', 'profil-mhs', 'user', 'user-all'])};
+const putKelasMhs = () => {return apicache.clear(['kelas-mhs-all'])};
+const putJawaban = () => {return apicache.clear(['jawaban-mhs', 'jawaban-soal-anon', 'jawaban-soal', 'nilai-total-mhs'])};
 //patch
-const deleteKelasMhs = apicache.clear(['kelas-mhs-all']);
-const deleteJawaban = apicache.clear(['jawaban-mhs', 'jawaban-soal-anon', 'jawaban-soal', 'nilai-total-mhs']);
+const deleteKelasMhs = () => {return apicache.clear(['kelas-mhs-all'])};
+const deleteJawaban = () => {return apicache.clear(['jawaban-mhs', 'jawaban-soal-anon', 'jawaban-soal', 'nilai-total-mhs'])};
 
 module.exports = {
     /* AuthController */

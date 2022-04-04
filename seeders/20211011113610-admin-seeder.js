@@ -1,18 +1,18 @@
 'use strict';
 const bcrypt = require('bcrypt');
 const sequelize = require('sequelize');
-const config = require('../config/dbconfig');
-const pass = async () => {await bcrypt.hash(config.auth.defaultPass, 10)}
+const config = require('.././src/config/dbconfig');
+const pass = async () => {return bcrypt.hash(config.auth.defaultPass, 10)}
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     return queryInterface.bulkInsert('Users',[
       {
-        username: 'admin',
+        username: 'admin77',
         email: 'admin@gmail.com',
-        password: pass(), // liat di.ENV
+        password: await pass(), // liat di.ENV
         status_civitas: 'aktif',
-        kode_role: '1',
+        id_role: '1',
         created_at: sequelize.fn('NOW')
       }
     ]);

@@ -1,0 +1,1288 @@
+{
+    "tables": {
+        "Captcha": {
+            "tableName": "Captcha",
+            "schema": {
+                "id_captcha": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_captcha",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "pertanyaan": {
+                    "allowNull": false,
+                    "field": "pertanyaan",
+                    "seqType": "Sequelize.STRING(25)"
+                },
+                "jawaban": {
+                    "allowNull": false,
+                    "field": "jawaban",
+                    "seqType": "Sequelize.STRING(5)"
+                }
+            },
+            "indexes": []
+        },
+        "Clients": {
+            "tableName": "Clients",
+            "schema": {
+                "id_client": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_client",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "client_name": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "client_name",
+                    "seqType": "Sequelize.STRING(25)"
+                },
+                "client_url": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "client_url",
+                    "seqType": "Sequelize.STRING(25)"
+                },
+                "api_key": {
+                    "allowNull": false,
+                    "field": "api_key",
+                    "seqType": "Sequelize.STRING(65)"
+                },
+                "jenis_client": {
+                    "allowNull": false,
+                    "field": "jenis_client",
+                    "references": {
+                        "model": "Ref_client",
+                        "key": "id_client"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "created_at": {
+                    "allowNull": false,
+                    "field": "created_at",
+                    "seqType": "Sequelize.DATE"
+                },
+                "updated_at": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "updated_at",
+                    "seqType": "Sequelize.DATE"
+                }
+            },
+            "indexes": {
+                "047016e2c685d7f1d240dcd8148ea7ddc3b510fa": {
+                    "name": "archived_by_createdAt",
+                    "unique": false,
+                    "fields": [
+                        "created_at",
+                        "updated_at"
+                    ],
+                    "options": {
+                        "indexName": "archived_by_createdAt",
+                        "name": "archived_by_createdAt"
+                    }
+                }
+            }
+        },
+        "Dosen": {
+            "tableName": "Dosen",
+            "schema": {
+                "id_dosen": {
+                    "primaryKey": true,
+                    "allowNull": false,
+                    "autoIncrement": true,
+                    "field": "id_dosen",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_user": {
+                    "allowNull": false,
+                    "field": "id_user",
+                    "references": {
+                        "model": "Users",
+                        "key": "id"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "NIP": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "NIP",
+                    "seqType": "Sequelize.STRING(20)"
+                },
+                "NIDN": {
+                    "unique": true,
+                    "field": "NIDN",
+                    "seqType": "Sequelize.STRING(10)"
+                },
+                "NIDK": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "NIDK",
+                    "seqType": "Sequelize.STRING(10)"
+                },
+                "nama_lengkap": {
+                    "allowNull": false,
+                    "field": "nama_lengkap",
+                    "seqType": "Sequelize.STRING(25)"
+                },
+                "alamat": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "alamat",
+                    "seqType": "Sequelize.TEXT"
+                },
+                "nomor_telp": {
+                    "allowNull": false,
+                    "field": "nomor_telp",
+                    "seqType": "Sequelize.STRING(12)"
+                },
+                "created_at": {
+                    "allowNull": false,
+                    "field": "created_at",
+                    "seqType": "Sequelize.DATE"
+                },
+                "updated_at": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "updated_at",
+                    "seqType": "Sequelize.DATE"
+                }
+            },
+            "indexes": {
+                "047016e2c685d7f1d240dcd8148ea7ddc3b510fa": {
+                    "name": "archived_by_createdAt",
+                    "unique": false,
+                    "fields": [
+                        "created_at",
+                        "updated_at"
+                    ],
+                    "options": {
+                        "indexName": "archived_by_createdAt",
+                        "name": "archived_by_createdAt"
+                    }
+                }
+            }
+        },
+        "Jawaban_mahasiswa": {
+            "tableName": "Jawaban_mahasiswa",
+            "schema": {
+                "id_jawaban": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_jawaban",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_relasi_soalpksoal": {
+                    "allowNull": false,
+                    "field": "id_relasi_soalpksoal",
+                    "references": {
+                        "model": "Rel_paketsoal_soal",
+                        "key": "id"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_mhs": {
+                    "allowNull": false,
+                    "field": "id_mhs",
+                    "references": {
+                        "model": "Mahasiswa",
+                        "key": "id_mhs"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "jawaban": {
+                    "allowNull": false,
+                    "field": "jawaban",
+                    "seqType": "Sequelize.TEXT"
+                },
+                "gambar_jawaban": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "gambar_jawaban",
+                    "seqType": "Sequelize.STRING(255)"
+                },
+                "audio_jawaban": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "audio_jawaban",
+                    "seqType": "Sequelize.STRING(50)"
+                },
+                "video_jawaban": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "video_jawaban",
+                    "seqType": "Sequelize.STRING(50)"
+                },
+                "nilai_jawaban": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "nilai_jawaban",
+                    "seqType": "Sequelize.INTEGER(3)"
+                },
+                "created_at": {
+                    "allowNull": false,
+                    "field": "created_at",
+                    "seqType": "Sequelize.DATE"
+                },
+                "updated_at": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "updated_at",
+                    "seqType": "Sequelize.DATE"
+                }
+            },
+            "indexes": {
+                "047016e2c685d7f1d240dcd8148ea7ddc3b510fa": {
+                    "name": "archived_by_createdAt",
+                    "unique": false,
+                    "fields": [
+                        "created_at",
+                        "updated_at"
+                    ],
+                    "options": {
+                        "indexName": "archived_by_createdAt",
+                        "name": "archived_by_createdAt"
+                    }
+                }
+            }
+        },
+        "Kelas": {
+            "tableName": "Kelas",
+            "schema": {
+                "id_kelas": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_kelas",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "kode_seksi": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "kode_seksi",
+                    "seqType": "Sequelize.STRING(10)"
+                },
+                "id_matkul": {
+                    "allowNull": false,
+                    "field": "id_matkul",
+                    "references": {
+                        "model": "Matakuliah",
+                        "key": "id_matkul"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_semester": {
+                    "field": "id_semester",
+                    "allowNull": true,
+                    "references": {
+                        "model": "Ref_semester",
+                        "key": "id_semester"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "hari": {
+                    "allowNull": false,
+                    "field": "hari",
+                    "seqType": "Sequelize.STRING(10)"
+                },
+                "jam": {
+                    "allowNull": false,
+                    "field": "jam",
+                    "seqType": "Sequelize.STRING(15)"
+                },
+                "deskripsi": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "deskripsi",
+                    "seqType": "Sequelize.TEXT"
+                }
+            },
+            "indexes": []
+        },
+        "Lupa_pw": {
+            "tableName": "Lupa_pw",
+            "schema": {
+                "id_reset_pw": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_reset_pw",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "username": {
+                    "allowNull": false,
+                    "field": "username",
+                    "seqType": "Sequelize.STRING(25)"
+                },
+                "email": {
+                    "allowNull": false,
+                    "field": "email",
+                    "seqType": "Sequelize.STRING(25)"
+                },
+                "status": {
+                    "field": "status",
+                    "seqType": "Sequelize.ENUM('sudah', 'belum')"
+                }
+            },
+            "indexes": []
+        },
+        "Mahasiswa": {
+            "tableName": "Mahasiswa",
+            "schema": {
+                "id_mhs": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_mhs",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_user": {
+                    "allowNull": false,
+                    "field": "id_user",
+                    "references": {
+                        "model": "Users",
+                        "key": "id"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "NIM": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "NIM",
+                    "seqType": "Sequelize.STRING(10)"
+                },
+                "nama_lengkap": {
+                    "allowNull": false,
+                    "field": "nama_lengkap",
+                    "seqType": "Sequelize.STRING(25)"
+                },
+                "alamat": {
+                    "field": "alamat",
+                    "seqType": "Sequelize.TEXT"
+                },
+                "nomor_telp": {
+                    "allowNull": false,
+                    "field": "nomor_telp",
+                    "seqType": "Sequelize.STRING(12)"
+                },
+                "created_at": {
+                    "allowNull": false,
+                    "field": "created_at",
+                    "seqType": "Sequelize.DATE"
+                },
+                "updated_at": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "updated_at",
+                    "seqType": "Sequelize.DATE"
+                }
+            },
+            "indexes": {
+                "047016e2c685d7f1d240dcd8148ea7ddc3b510fa": {
+                    "name": "archived_by_createdAt",
+                    "unique": false,
+                    "fields": [
+                        "created_at",
+                        "updated_at"
+                    ],
+                    "options": {
+                        "indexName": "archived_by_createdAt",
+                        "name": "archived_by_createdAt"
+                    }
+                }
+            }
+        },
+        "Matakuliah": {
+            "tableName": "Matakuliah",
+            "schema": {
+                "id_matkul": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_matkul",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "kode_matkul": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "kode_matkul",
+                    "seqType": "Sequelize.STRING(10)"
+                },
+                "id_kel_mk": {
+                    "allowNull": false,
+                    "field": "id_kel_mk",
+                    "references": {
+                        "model": "Ref_kel_matkul",
+                        "key": "id_kel_mk"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_peminatan": {
+                    "field": "id_peminatan",
+                    "allowNull": true,
+                    "references": {
+                        "model": "Ref_peminatan",
+                        "key": "id_peminatan"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "nama_matkul": {
+                    "allowNull": false,
+                    "unique": true,
+                    "field": "nama_matkul",
+                    "seqType": "Sequelize.STRING(50)"
+                },
+                "sks": {
+                    "allowNull": false,
+                    "field": "sks",
+                    "seqType": "Sequelize.INTEGER(5)"
+                },
+                "deskripsi": {
+                    "field": "deskripsi",
+                    "seqType": "Sequelize.TEXT"
+                }
+            },
+            "indexes": []
+        },
+        "Notifikasi": {
+            "tableName": "Notifikasi",
+            "schema": {
+                "id_notif": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_notif",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_pengirim": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "id_pengirim",
+                    "allowNull": true,
+                    "references": {
+                        "model": "Users",
+                        "key": "id"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_penerima": {
+                    "allowNull": false,
+                    "field": "id_penerima",
+                    "references": {
+                        "model": "Users",
+                        "key": "id"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "notifikasi": {
+                    "allowNull": false,
+                    "field": "notifikasi",
+                    "seqType": "Sequelize.TEXT"
+                },
+                "created_at": {
+                    "allowNull": false,
+                    "field": "created_at",
+                    "seqType": "Sequelize.DATE"
+                },
+                "updated_at": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "updated_at",
+                    "seqType": "Sequelize.DATE"
+                }
+            },
+            "indexes": {
+                "047016e2c685d7f1d240dcd8148ea7ddc3b510fa": {
+                    "name": "archived_by_createdAt",
+                    "unique": false,
+                    "fields": [
+                        "created_at",
+                        "updated_at"
+                    ],
+                    "options": {
+                        "indexName": "archived_by_createdAt",
+                        "name": "archived_by_createdAt"
+                    }
+                }
+            }
+        },
+        "Paket_soal": {
+            "tableName": "Paket_soal",
+            "schema": {
+                "id_paket": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_paket",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "kode_paket": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "kode_paket",
+                    "seqType": "Sequelize.STRING(5)"
+                },
+                "id_ujian": {
+                    "allowNull": false,
+                    "field": "id_ujian",
+                    "references": {
+                        "model": "Ujian",
+                        "key": "id_ujian"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "aktif": {
+                    "allowNull": false,
+                    "defaultValue": {
+                        "value": 1
+                    },
+                    "field": "aktif",
+                    "seqType": "Sequelize.BOOLEAN"
+                }
+            },
+            "indexes": []
+        },
+        "Pengumuman": {
+            "tableName": "Pengumuman",
+            "schema": {
+                "id_pengumuman": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_pengumuman",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "pengumuman": {
+                    "allowNull": false,
+                    "field": "pengumuman",
+                    "seqType": "Sequelize.TEXT"
+                },
+                "status": {
+                    "allowNull": false,
+                    "field": "status",
+                    "seqType": "Sequelize.ENUM('tampil', 'tidak_tampil')"
+                }
+            },
+            "indexes": []
+        },
+        "Ref_client": {
+            "tableName": "Ref_client",
+            "schema": {
+                "id_client": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_client",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "client": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "client",
+                    "seqType": "Sequelize.STRING(11)"
+                }
+            },
+            "indexes": []
+        },
+        "Ref_jenis_ujian": {
+            "tableName": "Ref_jenis_ujian",
+            "schema": {
+                "id_jenis_ujian": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_jenis_ujian",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "jenis_ujian": {
+                    "allowNull": true,
+                    "field": "jenis_ujian",
+                    "seqType": "Sequelize.STRING(25)"
+                }
+            },
+            "indexes": []
+        },
+        "Ref_kel_matkul": {
+            "tableName": "Ref_kel_matkul",
+            "schema": {
+                "id_kel_mk": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_kel_mk",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "kelompok_matakuliah": {
+                    "allowNull": false,
+                    "unique": true,
+                    "field": "kelompok_matakuliah",
+                    "seqType": "Sequelize.STRING(25)"
+                }
+            },
+            "indexes": []
+        },
+        "Ref_peminatan": {
+            "tableName": "Ref_peminatan",
+            "schema": {
+                "id_peminatan": {
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_peminatan",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "peminatan": {
+                    "allowNull": true,
+                    "unique": true,
+                    "field": "peminatan",
+                    "seqType": "Sequelize.STRING(25)"
+                }
+            },
+            "indexes": []
+        },
+        "Ref_role": {
+            "tableName": "Ref_role",
+            "schema": {
+                "id_role": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_role",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "role": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "role",
+                    "seqType": "Sequelize.STRING(11)"
+                }
+            },
+            "indexes": []
+        },
+        "Ref_semester": {
+            "tableName": "Ref_semester",
+            "schema": {
+                "id_semester": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_semester",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "semester": {
+                    "allowNull": true,
+                    "unique": true,
+                    "field": "semester",
+                    "seqType": "Sequelize.STRING(5)"
+                }
+            },
+            "indexes": []
+        },
+        "Rel_dosen_kelas": {
+            "tableName": "Rel_dosen_kelas",
+            "schema": {
+                "id": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_dosen": {
+                    "allowNull": false,
+                    "field": "id_dosen",
+                    "unique": "Rel_dosen_kelas_id_kelas_id_dosen_unique",
+                    "references": {
+                        "model": "Dosen",
+                        "key": "id_dosen"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_kelas": {
+                    "allowNull": false,
+                    "field": "id_kelas",
+                    "unique": "Rel_dosen_kelas_id_kelas_id_dosen_unique",
+                    "references": {
+                        "model": "Kelas",
+                        "key": "id_kelas"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                }
+            },
+            "indexes": []
+        },
+        "Rel_kelas_ujian": {
+            "tableName": "Rel_kelas_ujian",
+            "schema": {
+                "id": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_kelas": {
+                    "allowNull": false,
+                    "field": "id_kelas",
+                    "unique": "Rel_kelas_ujian_id_ujian_id_kelas_unique",
+                    "references": {
+                        "model": "Kelas",
+                        "key": "id_kelas"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_ujian": {
+                    "allowNull": false,
+                    "field": "id_ujian",
+                    "references": {
+                        "model": "Ujian",
+                        "key": "id_ujian"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "unique": "Rel_kelas_ujian_id_ujian_id_kelas_unique",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                }
+            },
+            "indexes": []
+        },
+        "Rel_mahasiswa_kelas": {
+            "tableName": "Rel_mahasiswa_kelas",
+            "schema": {
+                "id": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_mhs": {
+                    "allowNull": false,
+                    "field": "id_mhs",
+                    "unique": "Rel_mahasiswa_kelas_id_mhs_id_kelas_unique",
+                    "references": {
+                        "model": "Mahasiswa",
+                        "key": "id_mhs"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_kelas": {
+                    "allowNull": false,
+                    "field": "id_kelas",
+                    "unique": "Rel_mahasiswa_kelas_id_mhs_id_kelas_unique",
+                    "references": {
+                        "model": "Kelas",
+                        "key": "id_kelas"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                }
+            },
+            "indexes": []
+        },
+        "Rel_mahasiswa_paketsoal": {
+            "tableName": "Rel_mahasiswa_paketsoal",
+            "schema": {
+                "id": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_mhs": {
+                    "allowNull": false,
+                    "field": "id_mhs",
+                    "unique": "Rel_mahasiswa_paketsoal_id_paket_id_mhs_unique",
+                    "references": {
+                        "model": "Mahasiswa",
+                        "key": "id_mhs"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_paket": {
+                    "allowNull": false,
+                    "field": "id_paket",
+                    "unique": "Rel_mahasiswa_paketsoal_id_paket_id_mhs_unique",
+                    "references": {
+                        "model": "Paket_soal",
+                        "key": "id_paket"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "nilai_total": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "nilai_total",
+                    "seqType": "Sequelize.INTEGER(3)"
+                },
+                "waktu_mulai": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "waktu_mulai",
+                    "seqType": "Sequelize.DATE"
+                },
+                "waktu_selesai": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "waktu_selesai",
+                    "seqType": "Sequelize.DATE"
+                },
+                "lama_pengerjaan": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "lama_pengerjaan",
+                    "seqType": "Sequelize.STRING(30)"
+                }
+            },
+            "indexes": []
+        },
+        "Rel_paketsoal_soal": {
+            "tableName": "Rel_paketsoal_soal",
+            "schema": {
+                "id": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_paket": {
+                    "allowNull": false,
+                    "field": "id_paket",
+                    "unique": "Rel_paketsoal_soal_id_soal_id_paket_unique",
+                    "references": {
+                        "model": "Paket_soal",
+                        "key": "id_paket"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_soal": {
+                    "allowNull": false,
+                    "field": "id_soal",
+                    "references": {
+                        "model": "Soal_essay",
+                        "key": "id_soal"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "unique": "Rel_paketsoal_soal_id_soal_id_paket_unique",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "no_urut_soal": {
+                    "allowNull": false,
+                    "field": "no_urut_soal",
+                    "seqType": "Sequelize.INTEGER(2)"
+                },
+                "bobot_soal": {
+                    "allowNull": false,
+                    "defaultValue": {
+                        "value": 0
+                    },
+                    "field": "bobot_soal",
+                    "seqType": "Sequelize.INTEGER(3)"
+                },
+                "kata_kunci_soal": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "kata_kunci_soal",
+                    "seqType": "Sequelize.STRING(200)"
+                }
+            },
+            "indexes": []
+        },
+        "Soal_essay": {
+            "tableName": "Soal_essay",
+            "schema": {
+                "id_soal": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_soal",
+                    "references": {
+                        "model": "Dosen",
+                        "key": "id_dosen"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_matkul": {
+                    "allowNull": false,
+                    "field": "id_matkul",
+                    "references": {
+                        "model": "Matakuliah",
+                        "key": "id_matkul"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_dosen": {
+                    "allowNull": false,
+                    "field": "id_dosen",
+                    "references": {
+                        "model": "Dosen",
+                        "key": "id_dosen"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "soal": {
+                    "allowNull": false,
+                    "field": "soal",
+                    "seqType": "Sequelize.TEXT"
+                },
+                "gambar_soal": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "gambar_soal",
+                    "seqType": "Sequelize.STRING(155)"
+                },
+                "audio_soal": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "audio_soal",
+                    "seqType": "Sequelize.STRING(50)"
+                },
+                "video_soal": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "video_soal",
+                    "seqType": "Sequelize.STRING(50)"
+                },
+                "status": {
+                    "allowNull": false,
+                    "field": "status",
+                    "seqType": "Sequelize.ENUM('draft', 'terbit')"
+                },
+                "created_at": {
+                    "allowNull": false,
+                    "field": "created_at",
+                    "seqType": "Sequelize.DATE"
+                },
+                "updated_at": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "updated_at",
+                    "seqType": "Sequelize.DATE"
+                }
+            },
+            "indexes": {
+                "047016e2c685d7f1d240dcd8148ea7ddc3b510fa": {
+                    "name": "archived_by_createdAt",
+                    "unique": false,
+                    "fields": [
+                        "created_at",
+                        "updated_at"
+                    ],
+                    "options": {
+                        "indexName": "archived_by_createdAt",
+                        "name": "archived_by_createdAt"
+                    }
+                }
+            }
+        },
+        "Token_histories": {
+            "tableName": "Token_histories",
+            "schema": {
+                "id_user": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "field": "id_user",
+                    "references": {
+                        "model": "Users",
+                        "key": "id"
+                    },
+                    "onDelete": "NO ACTION",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "refresh_token": {
+                    "primaryKey": true,
+                    "field": "refresh_token",
+                    "seqType": "Sequelize.STRING(255)"
+                },
+                "isValid": {
+                    "allowNull": false,
+                    "defaultValue": {
+                        "value": 0
+                    },
+                    "field": "isValid",
+                    "seqType": "Sequelize.BOOLEAN"
+                },
+                "created_at": {
+                    "allowNull": false,
+                    "field": "created_at",
+                    "seqType": "Sequelize.DATEONLY"
+                }
+            },
+            "indexes": []
+        },
+        "Ujian": {
+            "tableName": "Ujian",
+            "schema": {
+                "id_ujian": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id_ujian",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "id_jenis_ujian": {
+                    "allowNull": true,
+                    "field": "id_jenis_ujian",
+                    "references": {
+                        "model": "Ref_jenis_ujian",
+                        "key": "id_jenis_ujian"
+                    },
+                    "onDelete": "CASCADE",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "judul_ujian": {
+                    "allowNull": false,
+                    "field": "judul_ujian",
+                    "seqType": "Sequelize.STRING(45)"
+                },
+                "tanggal_mulai": {
+                    "allowNull": false,
+                    "field": "tanggal_mulai",
+                    "seqType": "Sequelize.DATEONLY"
+                },
+                "waktu_mulai": {
+                    "allowNull": false,
+                    "field": "waktu_mulai",
+                    "seqType": "Sequelize.TIME"
+                },
+                "durasi_ujian": {
+                    "allowNull": false,
+                    "field": "durasi_ujian",
+                    "seqType": "Sequelize.TIME"
+                },
+                "durasi_per_soal": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "durasi_per_soal",
+                    "seqType": "Sequelize.TIME"
+                },
+                "bobot_per_soal": {
+                    "allowNull": false,
+                    "defaultValue": {
+                        "value": "sembunyikan"
+                    },
+                    "field": "bobot_per_soal",
+                    "seqType": "Sequelize.ENUM('tampilkan', 'sembunyikan')"
+                },
+                "bobot_total": {
+                    "allowNull": false,
+                    "field": "bobot_total",
+                    "seqType": "Sequelize.INTEGER(5).UNSIGNED"
+                },
+                "status_ujian": {
+                    "allowNull": false,
+                    "field": "status_ujian",
+                    "seqType": "Sequelize.ENUM('draft', 'akan dimulai', 'sedang berlangsung', 'selesai')"
+                },
+                "tipe_penilaian": {
+                    "field": "tipe_penilaian",
+                    "seqType": "Sequelize.ENUM('automatis', 'manual', 'campuran')"
+                },
+                "aktif": {
+                    "allowNull": false,
+                    "defaultValue": {
+                        "value": 0
+                    },
+                    "field": "aktif",
+                    "seqType": "Sequelize.BOOLEAN"
+                },
+                "deskripsi": {
+                    "field": "deskripsi",
+                    "seqType": "Sequelize.TEXT"
+                },
+                "created_at": {
+                    "allowNull": false,
+                    "field": "created_at",
+                    "seqType": "Sequelize.DATE"
+                },
+                "updated_at": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "updated_at",
+                    "seqType": "Sequelize.DATE"
+                }
+            },
+            "indexes": {
+                "047016e2c685d7f1d240dcd8148ea7ddc3b510fa": {
+                    "name": "archived_by_createdAt",
+                    "unique": false,
+                    "fields": [
+                        "created_at",
+                        "updated_at"
+                    ],
+                    "options": {
+                        "indexName": "archived_by_createdAt",
+                        "name": "archived_by_createdAt"
+                    }
+                }
+            }
+        },
+        "Users": {
+            "tableName": "Users",
+            "schema": {
+                "id": {
+                    "allowNull": false,
+                    "primaryKey": true,
+                    "autoIncrement": true,
+                    "field": "id",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "username": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "username",
+                    "seqType": "Sequelize.STRING(25)"
+                },
+                "email": {
+                    "unique": true,
+                    "allowNull": false,
+                    "field": "email",
+                    "seqType": "Sequelize.STRING(50)"
+                },
+                "password": {
+                    "allowNull": false,
+                    "field": "password",
+                    "seqType": "Sequelize.STRING(65)"
+                },
+                "status_civitas": {
+                    "defaultValue": {
+                        "value": "aktif"
+                    },
+                    "allowNull": false,
+                    "field": "status_civitas",
+                    "seqType": "Sequelize.ENUM('aktif', 'tidak_aktif')"
+                },
+                "id_role": {
+                    "allowNull": false,
+                    "field": "id_role",
+                    "references": {
+                        "model": "Ref_role",
+                        "key": "id_role"
+                    },
+                    "onDelete": "RESTRICT",
+                    "onUpdate": "CASCADE",
+                    "seqType": "Sequelize.INTEGER(11).UNSIGNED"
+                },
+                "foto_profil": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "foto_profil",
+                    "seqType": "Sequelize.STRING(100)"
+                },
+                "keterangan": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "keterangan",
+                    "seqType": "Sequelize.TEXT"
+                },
+                "created_at": {
+                    "allowNull": false,
+                    "field": "created_at",
+                    "seqType": "Sequelize.DATE"
+                },
+                "updated_at": {
+                    "defaultValue": {
+                        "value": null
+                    },
+                    "field": "updated_at",
+                    "seqType": "Sequelize.DATE"
+                }
+            },
+            "indexes": {
+                "047016e2c685d7f1d240dcd8148ea7ddc3b510fa": {
+                    "name": "archived_by_createdAt",
+                    "unique": false,
+                    "fields": [
+                        "created_at",
+                        "updated_at"
+                    ],
+                    "options": {
+                        "indexName": "archived_by_createdAt",
+                        "name": "archived_by_createdAt"
+                    }
+                }
+            }
+        }
+    },
+    "path": "D:\\aplussunj\\migrations\\_current.json",
+    "backupPath": "D:\\aplussunj\\migrations\\_current_bak.json",
+    "exists": false,
+    "revision": 1
+}

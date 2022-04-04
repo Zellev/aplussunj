@@ -81,7 +81,7 @@ let router = express.Router({mergeParams:true});
     router.post('/soal-essay/bulk', rateSlowdown, rateLimiter, uploadFiles3, BulkSoalCheck, DosenControl.setSoalBulk);
     router.post('/soal-essay/rel-ujian', rateSlowdown, rateLimiter, SoalCheck, uploadFiles, DosenControl.setSoaldanRelasi); // post ke bank soal sekaligus relasikan ke paket ybs
     router.put('/soal-essay/:id_soal', rateSlowdown, rateLimiter, SoalCheck, uploadFiles, DosenControl.putSoal);
-    router.put('/soal-essay/bulk', rateSlowdown, rateLimiter, uploadFiles3,  BulkSoalCheck, DosenControl.putSoalBulk);
+    router.put('/soal-essay/bulk', rateSlowdown, rateLimiter, uploadFiles3, BulkSoalCheck, DosenControl.putSoalBulk);
     router.patch('/soal-essay/:id_soal/gambar', rateSlowdown, rateLimiter, uploadFiles2, DosenControl.patchGambarSoal);
     router.patch('/soal-essay/:id_soal/audio', rateSlowdown, rateLimiter, uploadFile.single('audio_soal'), DosenControl.patchAudioSoal);
     router.patch('/soal-essay/:id_soal/video', rateSlowdown, rateLimiter, uploadFile.single('video_soal'), DosenControl.patchVideoSoal);

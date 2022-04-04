@@ -237,7 +237,7 @@ module.exports = {
         await Mahasiswa.update(updateVal2, {
           where: { id_user: user.id }
         });
-        CacheControl.putmyProfileMhs;
+        CacheControl.putmyProfileMhs();
       res.status(200).json({
         success: true,
         msg: `profil anda berhasil diubah`
@@ -383,7 +383,7 @@ module.exports = {
       const mhs = await user.getMahasiswa();
       const idKelas = req.body.id_kelas;
       mhs.addKelases(idKelas);
-      CacheControl.postKelasMhs;
+      CacheControl.postKelasMhs();
       res.status(200).json({
         success: true,
         msg: 'kelas berhasil ditambahkan'
@@ -399,7 +399,7 @@ module.exports = {
       const mhs = await user.getMahasiswa();
       const idKelas = req.body.id_kelas;
       mhs.setKelases(idKelas);
-      CacheControl.putKelasMhs;
+      CacheControl.putKelasMhs();
       res.status(200).json({
         success: true,
         msg: 'kelas yang diikuti berhasil diubah'
@@ -415,7 +415,7 @@ module.exports = {
       const mhs = await user.getMahasiswa();
       const idKelas = req.body.id_kelas;
       mhs.removeKelases(idKelas);
-      CacheControl.deleteKelasMhs;
+      CacheControl.deleteKelasMhs();
       res.status(200).json({
         success: true,
         msg: 'berhasil menghapus kelas'
@@ -448,7 +448,7 @@ module.exports = {
           [Op.and]: [{id_mhs: pkSoal.id_mhs}, {id_paket: pkSoal.PaketSoals.id_paket}]
         }
       });
-      CacheControl.postWaktuMulai;
+      CacheControl.postWaktuMulai();
       res.status(200).json({
         success: true,
         msg: 'waktu mulai berhasil ditambahkan'
@@ -491,7 +491,7 @@ module.exports = {
           [Op.and]: [{id_mhs: pkSoal.id_mhs}, {id_paket: pkSoal.PaketSoals.id_paket}]
         }
       });
-      CacheControl.postWaktuSelesai;
+      CacheControl.postWaktuSelesai();
       res.status(200).json({
         success: true,
         msg: 'waktu selesai dan lama pengerjaan berhasil ditambahkan'
@@ -540,7 +540,7 @@ module.exports = {
         id_mhs: mhsJson.id_mhs,
         id_paket: id_paket
       });
-      CacheControl.postPaketMhs;
+      CacheControl.postPaketMhs();
       res.status(201).json({
         success: true,
         msg: `mahasiswa dengan id ${mhsJson.id_mhs}, berhasil direlasikan dengan paket ${id_paket}`,
@@ -911,7 +911,8 @@ module.exports = {
   async searchJawaban(req, res, next){
     try {
       let { find } = req.query;      
-      const validator = jawabanValidator(find);      
+      const validator = jawabanValidator(find);
+      if (validator instanceof createError) throw validator;     
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       const mhs = await req.user.getMahasiswa({attributes:['id_mhs']});
@@ -1034,7 +1035,7 @@ module.exports = {
         video_jawaban: videoJawaban,
         created_at: fn('NOW')
       });
-      CacheControl.postNewJawaban;
+      CacheControl.postNewJawaban();
       res.status(200).json({
         success: true,
         msg: 'jawaban berhasil ditambahkan'
@@ -1060,7 +1061,7 @@ module.exports = {
         }
       });
       await Jawaban_mahasiswa.bulkCreate(mapped);
-      CacheControl.postNewJawaban;
+      CacheControl.postNewJawaban();
       res.status(200).json({
         success: true,
         msg: `sebanyak ${mapped.length} jawaban berhasil ditambahkan`
@@ -1114,7 +1115,7 @@ module.exports = {
         await Jawaban_mahasiswa.update(updateVal, {
           where: { id_jawaban: idJawaban }
         });
-        CacheControl.putJawaban;
+        CacheControl.putJawaban();
         res.status(200).json({
           success: true,
           msg: 'jawaban berhasil diedit'
@@ -1146,7 +1147,7 @@ module.exports = {
             id_jawaban: id_jawaban
           }
         });
-        CacheControl.deleteJawaban;
+        CacheControl.deleteJawaban();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -1266,7 +1267,7 @@ module.exports = {
       await Rel_mahasiswa_paketsoal.bulkCreate(data, {
         updateOnDuplicate: ['id_mhs', 'id_paket', 'nilai_total']
       });
-      CacheControl.postNilaiAuto;
+      CacheControl.postNilaiAuto();
       res.status(200).json({
         success: true,
         msg: 'nilai berhasil disimpan.'

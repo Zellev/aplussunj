@@ -12,7 +12,8 @@ const createError = require('../errorHandlers/ApiErrors');
 const { promisify } = require('util');
 const unlinkAsync = promisify(fs.unlink);
 const { paginator, shuffleArray, todaysdate, dateFull, hashed } = require('../helpers/global');
-const { ujianValidator, matkulValidator } = require('../validator/SearchValidator');
+const { userValidator, dosenValidator, mhsValidator, 
+        ujianValidator, matkulValidator } = require('../validator/SearchValidator');
 const { Op, fn } = require('sequelize');
 
 const pathAll = (filename, filetype) => {
@@ -191,21 +192,14 @@ module.exports = {
   async searchUser(req, res, next) {
     try {
       let { find } = req.query;
-      find = find.toLowerCase();
+      const validator = userValidator(find);
+      if (validator instanceof createError) throw validator;
       let user = [], temp = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {        
         attributes: ['id', 'username', 'email', 'status_civitas', 'id_role'],
-        where: {
-          [Op.or]: [
-            {id: {[Op.like]:'%' + find + '%'}},
-            {username: {[Op.like]:'%' + find + '%'}},
-            {email: {[Op.like]:'%' + find + '%'}},
-            {status_civitas: {[Op.like]:'%' + find + '%'}},
-            {'$Role.role$': {[Op.like]:'%' + find + '%'}}
-          ]
-        },
+        where: { [Op.or]: validator },
         offset: (pages - 1) * limits,
         limit: limits,
         include: {
@@ -295,7 +289,7 @@ module.exports = {
         await User.update(updateVal, {
           where: { id: id_user }
         });
-        CacheControl.putUser;
+        CacheControl.putUser();
         res.status(200).json({
           success: true,
           msg: `data user ${id_user} berhasil diubah`
@@ -334,7 +328,7 @@ module.exports = {
           'keterangan', 'updated_at'
         ]
       });
-      CacheControl.putUser;
+      CacheControl.putUser();
       res.status(200).json({
         success: true,
         msg: 'data user berhasil diubah sesuai: ' + req.file.originalname
@@ -361,7 +355,7 @@ module.exports = {
             id: getuser.id
           }
         });
-        CacheControl.deleteUser;
+        CacheControl.deleteUser();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -398,7 +392,7 @@ module.exports = {
       await User.update(updateVal, {
         where: { id: user.id }
       });
-      CacheControl.putmyProfileAdmin;
+      CacheControl.putmyProfileAdmin();
       res.status(200).json({
         success: true,
         msg: `profil anda berhasil diubah`
@@ -454,7 +448,7 @@ module.exports = {
           });
         Role = 'Mahasiswa';
       }
-      CacheControl.postNewUser;
+      CacheControl.postNewUser();
       res.status(200).json({
         success: true,
         msg: `${Role} berhasil ditambahkan`
@@ -497,19 +491,14 @@ module.exports = {
   async searchDosen(req, res, next) {
     try {
       let { find } = req.query;
-      find = find.toLowerCase();
+      const validator = dosenValidator(find);
+      if (validator instanceof createError) throw validator;
       let dosen = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {        
         attributes: ['id_dosen', 'NIDN', 'NIDK', 'nama_lengkap'],
-        where: {
-          [Op.or]: [
-            {nama_lengkap: {[Op.like]:'%' + find + '%'}},
-            {NIDN: {[Op.like]:'%' + find + '%'}},
-            {NIDK: {[Op.like]:'%' + find + '%'}}
-          ] 
-        },
+        where: { [Op.or]: validator },
         offset: (pages - 1) * limits,
         limit: limits,
         order: [['id_dosen', 'ASC']]
@@ -559,7 +548,7 @@ module.exports = {
           })
         }
       }
-      CacheControl.postNewUser;
+      CacheControl.postNewUser();
       res.status(200).json({
         success: true,
         msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
@@ -591,7 +580,7 @@ module.exports = {
         await Dosen.update(updateVal, {
           where: { id_dosen: id_dosen }
         });
-        CacheControl.putDosen;
+        CacheControl.putDosen();
         res.status(200).json({
           success: true,
           msg: 'data dosen berhasil diubah'
@@ -632,7 +621,7 @@ module.exports = {
           'alamat','nomor_telp', 'updated_at'
         ]
       });
-      CacheControl.putDosen;
+      CacheControl.putDosen();
       res.status(200).json({
         success: true,
         msg: 'data dosen berhasil diubah sesuai: ' + req.file.originalname
@@ -664,7 +653,7 @@ module.exports = {
             id: getdosen.User.id
           }
         });
-        CacheControl.deleteDosen;
+        CacheControl.deleteDosen();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -706,18 +695,14 @@ module.exports = {
   async searchMhs(req, res, next) {
     try {
       let { find } = req.query;
-      find = find.toLowerCase();
+      const validator = mhsValidator(find);
+      if (validator instanceof createError) throw validator;
       let mhs = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {        
         attributes: ['id_mhs', 'NIM', 'nama_lengkap'],
-        where: {
-          [Op.or]: [
-            {nama_lengkap: {[Op.like]:'%' + find + '%'}},
-            {NIM: {[Op.like]:'%' + find + '%'}}
-          ] 
-        },
+        where: { [Op.or]: validator },
         offset: (pages - 1) * limits,
         limit: limits,
         order: [['id_mhs', 'ASC']]
@@ -765,7 +750,7 @@ module.exports = {
           });
         }
       }
-      CacheControl.postNewUser;
+      CacheControl.postNewUser();
       res.status(200).json({
         success: true,
         msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
@@ -795,7 +780,7 @@ module.exports = {
         await Mahasiswa.update(updateVal, {
           where: { id_mhs: id_mhs }
         });
-        CacheControl.putMhs;
+        CacheControl.putMhs();
         res.status(200).json({
           success: true,
           msg: 'data mahasiswa berhasil diubah'
@@ -834,7 +819,7 @@ module.exports = {
           'nomor_telp', 'updated_at'
         ]
       });
-      CacheControl.putMhs;
+      CacheControl.putMhs();
       res.status(200).json({
         success: true,
         msg: 'data mahasiswa berhasil diubah sesuai: ' + req.file.originalname
@@ -866,7 +851,7 @@ module.exports = {
             id: getMhs.User.id
           }
         });
-        CacheControl.deleteMhs;
+        CacheControl.deleteMhs();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -910,6 +895,7 @@ module.exports = {
     try {
       let { find } = req.query;
       const validator = matkulValidator(find);
+      if (validator instanceof createError) throw validator;
       let matkul = [], temp = [];
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
@@ -986,7 +972,7 @@ module.exports = {
         sks: sks,
         deskripsi: deskripsi
       });
-      CacheControl.postNewMatkul;
+      CacheControl.postNewMatkul();
       res.status(200).json({
         success: true,
         msg: 'matakuliah berhasil ditambahkan'
@@ -1034,7 +1020,7 @@ module.exports = {
         }
       }
       await Matakuliah.bulkCreate(data);
-      CacheControl.postNewMatkul;
+      CacheControl.postNewMatkul();
       res.status(200).json({
         success: true,
         msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
@@ -1064,7 +1050,7 @@ module.exports = {
       await Matakuliah.update(updateVal, {
         where: { id_matkul: id_matkul }
       });
-      CacheControl.putMatkul;
+      CacheControl.putMatkul();
       res.status(200).json({
         success: true,
         msg: 'data matakuliah berhasil diubah'
@@ -1117,7 +1103,7 @@ module.exports = {
         updateOnDuplicate: [ 'id_matkul','kode_matkul','id_kel_mk',
           'id_peminatan','nama_matkul', 'sks','deskripsi','updated_at' ]
       });
-      CacheControl.putMatkul;
+      CacheControl.putMatkul();
       res.status(200).json({
         success: true,
         msg: 'data matakuliah berhasil diubah sesuai: ' + req.file.originalname
@@ -1143,7 +1129,7 @@ module.exports = {
             id_matkul: getMatkul.id_matkul
           }
         });
-        CacheControl.deleteMatkul;
+        CacheControl.deleteMatkul();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -1195,7 +1181,7 @@ module.exports = {
         }
       });
       kelas.addMahasiswas(data);
-      CacheControl.postNewMhsKelas;
+      CacheControl.postNewMhsKelas();
       res.status(200).json({
         success: true,
         msg: `relasi mahasiswa-kelas berhasil di tambah sesuai ${req.file.originalname}`
@@ -1225,7 +1211,7 @@ module.exports = {
         }
       });
       kelas.setMahasiswas(updateVal);
-      CacheControl.putMhsKelas;
+      CacheControl.putMhsKelas();
       res.status(200).json({
         success: true,
         msg: `relasi mahasiswa-kelas berhasil di ubah sesuai ${req.file.originalname}`
@@ -1243,7 +1229,7 @@ module.exports = {
       const nim = req.body.nim;
       const kelas = await Kelas.findByPk(req.params.id_kelas);      
       kelas.removeMahasiswas(nim);
-      CacheControl.deleteMhsKelas;
+      CacheControl.deleteMhsKelas();
       res.status(200).json({
         success: true,
         msg: `relasi mahasiswa ${nim}, dengan kelas ini berhasil dihapus`
@@ -1298,7 +1284,7 @@ module.exports = {
             kls.addDosen(i)
           }
         }
-        CacheControl.postNewDosenKelas;
+        CacheControl.postNewDosenKelas();
         res.status(200).json({
           success: true,
           msg: `dosen pengampu ${nidk}, berhasil ditambahkan ke kode seksi ${kls.kode_seksi}`
@@ -1328,7 +1314,7 @@ module.exports = {
           }
         }
         kls.setDosens(temp);
-        CacheControl.putDosenKelas;
+        CacheControl.putDosenKelas();
         res.status(200).json({
           success: true,
           msg: `dosen pengampu kode seksi ${kls.kode_seksi}, berhasil diubah ke ${nidk}`
@@ -1344,7 +1330,7 @@ module.exports = {
       const kelas = await Kelas.findByPk(req.params.id_kelas);
       const noregDosens = req.body.id_dosen;
       kelas.removeDosens(noregDosens);
-      CacheControl.deleteDosenKelas;
+      CacheControl.deleteDosenKelas();
       res.status(200).json({
         success: true,
         msg: `dosen pengampu ${noregDosens}, untuk kode seksi ini berhasil dihapus`
@@ -1383,7 +1369,7 @@ module.exports = {
           kelas.addDosen(i)
         }
       }
-      CacheControl.postNewKelas;
+      CacheControl.postNewKelas();
       res.status(200).json({
         success: true,
         msg: 'kelas berhasil ditambahkan'
@@ -1438,7 +1424,7 @@ module.exports = {
           }
         }
       }
-      CacheControl.postNewKelas;
+      CacheControl.postNewKelas();
       res.status(200).json({
         success: true,
         msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
@@ -1485,7 +1471,7 @@ module.exports = {
         }
       }
       getKelas.setDosens(temp);
-      CacheControl.putKelas;
+      CacheControl.putKelas();
       res.status(200).json({
         success: true,
         msg: 'data kelas berhasil diubah'
@@ -1545,7 +1531,7 @@ module.exports = {
         updateOnDuplicate: [ 'id_kelas','kode_seksi','id_matkul','id_semester', 
           'hari','jam','deskripsi','updated_at' ]
       });
-      CacheControl.putKelas;  
+      CacheControl.putKelas();  
       res.status(200).json({
         success: true,
         msg: 'data kelas berhasil diubah sesuai: ' + req.file.originalname
@@ -1569,7 +1555,7 @@ module.exports = {
           id_kelas: getKelas.id_kelas
         }
       });
-      CacheControl.deleteKelas;
+      CacheControl.deleteKelas();
       res.status(200).json({
         success: true,
         msg: 'data berhasil dihapus'
@@ -1681,7 +1667,7 @@ module.exports = {
       if(!id_ujian) throw createError.BadRequest('id ujian tidak boleh kosong!');
       const kelas = await Kelas.findByPk(id_kelas);
       kelas.addUjians(id_ujian);
-      CacheControl.postNewUjianKelas;
+      CacheControl.postNewUjianKelas();
       res.status(200).json({
         success: true,
         msg: `kelas berhasil direlasikan dengan ujian, ${id_ujian}`
@@ -1698,7 +1684,7 @@ module.exports = {
       if(!id_ujian) throw createError.BadRequest('id ujian tidak boleh kosong!');
       const kelas = await Kelas.findByPk(id_kelas);
       kelas.setUjians(id_ujian);
-      CacheControl.putUjianKelas;
+      CacheControl.putUjianKelas();
       res.status(200).json({
         success: true,
         msg: `relasi ujian pada kelas ${kelas.kode_seksi}, berhasil diubah`
@@ -1715,7 +1701,7 @@ module.exports = {
       if(!id_ujian) throw createError.BadRequest('id ujian tidak boleh kosong!');
       const kelas = await Kelas.findByPk(id_kelas);
       kelas.removeUjians(id_ujian);
-      CacheControl.deleteUjianKelas;
+      CacheControl.deleteUjianKelas();
       res.status(200).json({
         success: true,
         msg: `relasi ujian ${id_ujian} pada kelas ${kelas.kode_seksi}, berhasil dihapus`
@@ -1767,6 +1753,7 @@ module.exports = {
     try {
       let { find } = req.query;
       const validator = ujianValidator(find);
+      if (validator instanceof createError) throw validator;
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       let opt = {
@@ -1860,7 +1847,7 @@ module.exports = {
       await Ujian.update(updateVal, {
         where: { id_ujian: id_ujian }
       });
-      CacheControl.putUjian;
+      CacheControl.putUjian();
       res.status(200).json({
         success: true,
         msg: `data ujian ${id_ujian} berhasil diubah`
@@ -1937,7 +1924,7 @@ module.exports = {
           id_ujian: ujian.id_ujian
         }
       });
-      CacheControl.deleteUjian;
+      CacheControl.deleteUjian();
       res.status(200).json({
         success: true,
         msg: 'data berhasil dihapus'
@@ -1967,7 +1954,7 @@ module.exports = {
         }
       });
       await Rel_mahasiswa_paketsoal.bulkCreate(mapped);
-      CacheControl.postNewMhsPkSoal;
+      CacheControl.postNewMhsPkSoal();
       res.status(200).json({
         success: true,
         msg: `paket-soal berhasil direlasikan dengan mahasiswa pada kelas ${kelasMhs.kode_seksi}`
@@ -1989,7 +1976,7 @@ module.exports = {
         }
       });
       await Rel_mahasiswa_paketsoal.bulkCreate(paketMhs);
-      CacheControl.postNewMhsPkSoal;
+      CacheControl.postNewMhsPkSoal();
       res.status(200).json({
         success: true,
         msg: `paket-soal berhasil direlasikan dengan mahasiswa, ${id_mhs}`
@@ -2013,7 +2000,7 @@ module.exports = {
       await Rel_mahasiswa_paketsoal.bulkCreate(paketMhs, {
         updateOnDuplicate: ['id_paket', 'id_mhs']
       });
-      CacheControl.putMhsPkSoal;
+      CacheControl.putMhsPkSoal();
       res.status(200).json({
         success: true,
         msg: `relasi paket-soal mahasiswa berhasil diubah`
@@ -2031,7 +2018,7 @@ module.exports = {
       await Rel_mahasiswa_paketsoal.destroy({ where:{[Op.and]: [
         {id_paket: id_paket}, {id_mhs: id_mhs}]
       }});
-      CacheControl.deleteMhsPkSoal;
+      CacheControl.deleteMhsPkSoal();
       res.status(200).json({
         success: true,
         msg: `relasi paket-soal mahasiswa berhasil diubah`
@@ -2052,7 +2039,7 @@ module.exports = {
         where:{
           id_paket: id_paket
       }});
-      CacheControl.deletePaketSoal;
+      CacheControl.deletePaketSoal();
       res.status(200).json({
         success: true,
         msg: 'data paket-soal berhasil dihapus'
@@ -2110,7 +2097,7 @@ module.exports = {
           id_reset_pw: getlupapw.id_reset_pw
         }
       });
-      CacheControl.deleteLupapw;
+      CacheControl.deleteLupapw();
       res.status(200).json({
         success: true,
         msg: 'data berhasil dihapus'
@@ -2165,7 +2152,7 @@ module.exports = {
           pengumuman: pengumuman,
           status: status
         });
-        CacheControl.postNewPengumuman;
+        CacheControl.postNewPengumuman();
         res.status(200).json({
           success: true,
           msg: 'pengumuman berhasil ditambahkan'
@@ -2190,7 +2177,7 @@ module.exports = {
         await Pengumuman.update(updateVal, {
           where: { id_pengumuman: id_pengumuman }
         });
-        CacheControl.putPengumuman;
+        CacheControl.putPengumuman();
         res.status(200).json({
           success: true,
           msg: 'data pengumuman berhasil diubah'
@@ -2211,7 +2198,7 @@ module.exports = {
             id_pengumuman: getpengumuman.id_pengumuman
           }
         });
-        CacheControl.deletePengumuman;
+        CacheControl.deletePengumuman();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -2264,7 +2251,7 @@ module.exports = {
           pertanyaan: pertanyaan,
           jawaban: jawaban
         });
-        CacheControl.postNewCaptcha;
+        CacheControl.postNewCaptcha();
         res.status(200).json({
           success: true,
           msg: 'captcha berhasil ditambahkan'
@@ -2288,7 +2275,7 @@ module.exports = {
         }, {
           where: { id_captcha: idCaptcha }
         });
-        CacheControl.putCaptcha;
+        CacheControl.putCaptcha();
         res.status(200).json({
           success: true,
           msg: 'captcha berhasil diubah'
@@ -2308,7 +2295,7 @@ module.exports = {
         where:{
           id_captcha: getCpt.id_captcha
       }});
-      CacheControl.deleteCaptcha;
+      CacheControl.deleteCaptcha();
       res.status(200).json({
         success: true,
         msg: 'data berhasil dihapus'
@@ -2340,7 +2327,7 @@ module.exports = {
         await Ref_semester.create({
           semester:semester
         });
-        CacheControl.postNewSemester;
+        CacheControl.postNewSemester();
         res.status(200).json({
           success: true,
           msg: 'semester berhasil ditambahkan'
@@ -2364,7 +2351,7 @@ module.exports = {
         await Ref_semester.update(updateVal, {
           where: { id_semester: id_semester }
         });
-        CacheControl.putSemester;
+        CacheControl.putSemester();
         res.status(200).json({
           success: true,
           msg: 'data semester berhasil diubah'
@@ -2387,7 +2374,7 @@ module.exports = {
             id_semester: getSms.id_semester
           }
         });
-        CacheControl.deleteSemester;
+        CacheControl.deleteSemester();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -2441,7 +2428,7 @@ module.exports = {
         notifikasi: pesan,
         created_at: fn('NOW')
       });
-      CacheControl.postNewNotifikasi;
+      CacheControl.postNewNotifikasi();
       res.status(200).json({
         success: true,
         msg: 'notifikasi berhasil dikirim.'
@@ -2470,7 +2457,7 @@ module.exports = {
       await Notifikasi.update( updateVal, {
         where: {id_notif: idNotif}
       });
-      CacheControl.putNotifikasi;
+      CacheControl.putNotifikasi();
       res.status(200).json({
         success: true,
         msg: 'notifikasi berhasil diubah'
@@ -2488,7 +2475,7 @@ module.exports = {
       await Notifikasi.destroy({
         where: {id_notif: idNotif}
       });
-      CacheControl.deleteNotifikasi;
+      CacheControl.deleteNotifikasi();
       res.status(200).json({
         success: true,
         msg: 'data notifikasi berhasil dihapus'

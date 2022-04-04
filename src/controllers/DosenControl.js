@@ -375,7 +375,7 @@ module.exports = {
       await Dosen.update(updateVal2, {
         where: { id_user: user.id }
       });
-      CacheControl.putmyProfileDosen;
+      CacheControl.putmyProfileDosen();
       res.status(200).json({
         success: true,
         msg: `profil anda berhasil diubah`
@@ -412,7 +412,7 @@ module.exports = {
       }).then(async (o) => {
         o.addKelases(idKelas);
       });
-      CacheControl.postNewUjianDraft;
+      CacheControl.postNewUjianDraft();
       res.status(200).json({
         success: true,
         msg: 'Ujian berhasil dibuat',
@@ -473,7 +473,7 @@ module.exports = {
         }        
       });
       await Rel_paketsoal_soal.bulkCreate(soal);
-      CacheControl.postNewUjianAktif;
+      CacheControl.postNewUjianAktif();
       res.status(200).json({
         success: true,
         msg: `Ujian dengan kode paket ${kdPaket} berhasil dibuat, dengan soal sebanyak ${id_soal.length} butir`,
@@ -569,7 +569,7 @@ module.exports = {
           updateOnDuplicate: ['id_paket', 'id_mhs']
         });
       }
-      CacheControl.postNewUjianAktif;
+      CacheControl.postNewUjianAktif();
       res.status(200).json({
         success: true,
         msg: `Ujian dengan ${jml_paket} paket soal berhasil dibuat, dengan soal sebanyak ${id_soal.length}
@@ -745,7 +745,7 @@ module.exports = {
             });
           }
         }
-        CacheControl.postNewPaketSoal;
+        CacheControl.postNewPaketSoal();
         res.status(200).json({
           success: true,
           msg: `${jml_paket} paket soal berhasil dibuat untuk ujian ${ujian.judul_ujian},
@@ -987,6 +987,7 @@ module.exports = {
     try {
       let { find } = req.query;
       const validator = ujianValidator(find);
+      if (validator instanceof createError) throw validator;
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       const user = req.user
@@ -1080,7 +1081,7 @@ module.exports = {
         await Ujian.update(updateVal, {
           where: { id_ujian: id_ujian }
         });
-        CacheControl.putUjian;
+        CacheControl.putUjian();
         res.status(200).json({
           success: true,
           msg: `data ujian berhasil diubah`
@@ -1117,7 +1118,7 @@ module.exports = {
             id_ujian: ujian.id_ujian
           }
         });
-        CacheControl.deleteUjian;
+        CacheControl.deleteUjian();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -1349,7 +1350,7 @@ module.exports = {
           where:{
             id_paket: id_paket
         }});
-        CacheControl.deletePaketSoal;
+        CacheControl.deletePaketSoal();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -1377,7 +1378,7 @@ module.exports = {
       } else if(kelasExist === true) {
         const kelas = await Kelas.findByPk(id_kelas);
         kelas.addUjians(id_ujian);
-        CacheControl.postNewUjianKelas;
+        CacheControl.postNewUjianKelas();
         res.status(200).json({
           success: true,
           msg: `kelas berhasil direlasikan dengan ujian, ${id_ujian}`
@@ -1404,7 +1405,7 @@ module.exports = {
       } else if(kelasExist === true) {
         const kelas = await Kelas.findByPk(id_kelas);
         kelas.setUjians(id_ujian);
-        CacheControl.putUjianKelas;
+        CacheControl.putUjianKelas();
         res.status(200).json({
           success: true,
           msg: `relasi ujian pada kode seksi ${kelas.kode_seksi} berhasil diubah ke ${id_ujian}`
@@ -1431,7 +1432,7 @@ module.exports = {
       } else if(kelasExist === true) {
         const kelas = await Kelas.findByPk(id_kelas);
         kelas.removeUjians(id_ujian);
-        CacheControl.deleteUjianKelas;
+        CacheControl.deleteUjianKelas();
         res.status(200).json({
           success: true,
           msg: `relasi ujian ${id_ujian} pada kode seksi ${kelas.kode_seksi} berhasil dihapus`
@@ -1459,7 +1460,7 @@ module.exports = {
         const ujian = await Ujian.findByPk(id_ujian);
         if(!ujian) { throw createError.NotFound('ujian tidak terdaftar.'); }
         ujian.addKelases(id_kelas);
-        CacheControl.postNewUjianKelas;
+        CacheControl.postNewUjianKelas();
         res.status(200).json({
           success: true,
           msg: `ujian berhasil direlasikan dengan kelas ${id_kelas}`
@@ -1487,7 +1488,7 @@ module.exports = {
         const ujian = await Ujian.findByPk(id_ujian);
         if(!ujian) { throw createError.NotFound('ujian tidak terdaftar.'); }
         ujian.setKelases(id_kelas);
-        CacheControl.putUjianKelas;
+        CacheControl.putUjianKelas();
         res.status(200).json({
           success: true,
           msg: `ujian pada kelas ${id_kelas}, berhasil diubah`
@@ -1515,7 +1516,7 @@ module.exports = {
         const ujian = await Ujian.findByPk(id_ujian);
         if(!ujian) { throw createError.NotFound('ujian tidak terdaftar.'); }
         ujian.removeKelases(id_kelas);
-        CacheControl.deleteUjianKelas;
+        CacheControl.deleteUjianKelas();
         res.status(200).json({
           success: true,
           msg: `ujian berhasil dihapus pada kelas ${id_kelas}`
@@ -1572,7 +1573,7 @@ module.exports = {
           video_soal: video_soal,
           created_at: fn('NOW')
         });
-        CacheControl.postNewSoal;
+        CacheControl.postNewSoal();
         res.status(200).json({
           success: true,
           msg: `soal berhasil ditambahkan ke bank soal matakuliah ${id_matkul}`,
@@ -1637,7 +1638,7 @@ module.exports = {
         throw createError.Forbidden('maaf, anda tidak mengampu matakuliah ini');
       } 
       await Soal_essay.bulkCreate(data);
-      CacheControl.postNewSoal;
+      CacheControl.postNewSoal();
       res.status(200).json({
         success: true,
         msg: 'data berhasil diimport ke DB sesuai: ' + req.files.soal_bulk[0].originalname
@@ -1709,7 +1710,7 @@ module.exports = {
           video_soal: video_soal,
           created_at: fn('NOW')
         });
-        CacheControl.postNewSoal;
+        CacheControl.postNewSoal();
         res.status(200).json({
           success: true,
           msg: `soal berhasil ditambahkan ke bank soal matakuliah ${idMatkul}`,
@@ -1937,7 +1938,8 @@ module.exports = {
   async searchSoal(req, res, next){
     try {
       let { find } = req.query;      
-      const validator = soalValidator(find);      
+      const validator = soalValidator(find);
+      if (validator instanceof createError) throw validator;     
       const pages = parseInt(req.query.page);
       const limits = parseInt(req.query.limit);
       const user = req.user;
@@ -2016,7 +2018,7 @@ module.exports = {
         await Soal_essay.update(updateVal, {
           where: { id_soal: id_soal }
         });
-        CacheControl.putSoal;
+        CacheControl.putSoal();
         res.status(200).json({
           success: true,
           msg: 'soal berhasil diedit'
@@ -2030,7 +2032,7 @@ module.exports = {
   },
 
   async putSoalBulk(req, res, next){
-    let picPatharr = [], audioPatharr = [], videoPatharr = [];
+    let picPatharr = [];
     try {      
       const id_matkul = req.body.id_matkul;
       if(!id_matkul) throw createError.BadRequest('id matkul tidak boleh kosong!');
@@ -2094,7 +2096,7 @@ module.exports = {
         updateOnDuplicate: ['id_soal', 'id_matkul', 'id_dosen', 'soal', 
             'gambar_soal', 'audio_soal', 'video_soal', 'status', 'updated_at']
       });
-      CacheControl.putSoal;
+      CacheControl.putSoal();
       res.status(200).json({
         success: true,
         msg: `DB soal matakuliah ${id_matkul} berhasil diubah sesuai: ${req.files.soal_bulk[0].originalname}`
@@ -2105,13 +2107,13 @@ module.exports = {
           await unlinkAsync(i);
         }
       }
-      if(audioPatharr.length){
-        for(let i of audioPatharr){
+      if(req.audioPatharr.length){
+        for(let i of req.audioPatharr){
           await unlinkAsync(i);
         }
       }
-      if(videoPatharr.length){
-        for(let i of videoPatharr){
+      if(req.videoPatharr.length){
+        for(let i of req.videoPatharr){
           await unlinkAsync(i);
         }
       }
@@ -2256,7 +2258,7 @@ module.exports = {
             id_soal: getSoal.id_soal
           }
         });
-        CacheControl.deleteSoal;
+        CacheControl.deleteSoal();
         res.status(200).json({
           success: true,
           msg: 'data berhasil dihapus'
@@ -2321,7 +2323,7 @@ module.exports = {
         where: {id_ujian: idUjian.id_ujian} 
       });
       await Rel_paketsoal_soal.bulkCreate(soal);
-      CacheControl.postNewSoalPkSoal;
+      CacheControl.postNewSoalPkSoal();
       res.status(200).json({
         success: true,
         msg: `sebanyak ${id_soal.length} soal berhasil ditambahkan`
@@ -2349,7 +2351,7 @@ module.exports = {
       await Rel_paketsoal_soal.bulkCreate(updateSoal, {
         updateOnDuplicate: ['id_paket','id_soal','no_urut_soal', 'bobot_soal', 'kata_kunci_soal']
       });
-      CacheControl.putSoalPkSoal;
+      CacheControl.putSoalPkSoal();
       res.status(200).json({
         success: true,
         msg: `sebanyak ${id_soal.length} soal berhasil diupdate pada paket ${id_paket}`
@@ -2365,7 +2367,7 @@ module.exports = {
       const id_soal = req.body.id_soal;
       const pkSoal = await Paket_soal.findByPk(id_paket);
       pkSoal.removeSoals(id_soal);
-      CacheControl.deleteSoalPkSoal;
+      CacheControl.deleteSoalPkSoal();
       res.status(200).json({
         success: true,
         msg: `sebanyak ${id_soal.length} soal berhasil dihapus dari paket ${pkSoal.kode_paket}`
@@ -2646,7 +2648,7 @@ module.exports = {
       await Jawaban_mahasiswa.update(val, {
         where: { id_jawaban: idJawaban }
       });
-      CacheControl.postputNilaiJawaban;
+      CacheControl.postputNilaiJawaban();
       res.status(200).json({
         success: true,
         msg: `nilai jawaban berhasil ${status}`
@@ -2677,7 +2679,7 @@ module.exports = {
       await Rel_mahasiswa_paketsoal.update(val, {
         where: {id: id}
       });
-      CacheControl.postNewNilaiTotal;
+      CacheControl.postNewNilaiTotal();
       res.status(200).json({
         success: true,
         msg: `nilai total berhasil ${status}`
@@ -2767,7 +2769,7 @@ module.exports = {
       await Rel_mahasiswa_paketsoal.bulkCreate(data, {
         updateOnDuplicate: ['id_mhs', 'id_paket', 'nilai_total']
       });
-      CacheControl.postNewNilaiUjian;
+      CacheControl.postNewNilaiUjian();
       res.status(200).json({
         success: true,
         msg: `Nilai akhir ujian ${idUjian} untuk ${data.length} mahasiswa berhasil ditambahkan.`

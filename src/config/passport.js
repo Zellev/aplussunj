@@ -30,7 +30,7 @@ module.exports = (passport) => {
                 if(!tokenValid.isValid) {
                     await Token_history.destroy({ where: {id_user: jwt_payload.id}});
                     throw createError.Unauthorized('Access denied, please re-login.');
-                } else {
+                } else if(tokenValid.isValid){
                     const user = {
                         id: jwt_payload.id,
                         username: jwt_payload.username,
@@ -38,10 +38,12 @@ module.exports = (passport) => {
                     }
                     await Token_history.update({isValid: false}, {
                       where: {[Op.and]: [
-                        {id_user: jwt_payload.id}, {refresh_token: refToken}
+                        {id_user: jwt_payload.id}, {isValid: true}
                       ]}
                     });
                     return done(null, user);
+                } else {
+                    throw createError.Unauthorized('Access denied, please re-login.');
                 }
             } catch (error) {
                 return done(error, false);

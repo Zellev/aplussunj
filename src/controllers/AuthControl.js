@@ -160,7 +160,7 @@ module.exports = {
         where: {[Op.and]: [
           {id_user: id}, 
           {created_at: 
-            literal(`datediff(now(), Token_histories.created_at) > ${config.auth.tokenHistoryexpiry}`)
+            literal(`DATEDIFF(NOW(), "Token_histories"."created_at") > ${config.auth.tokenHistoryexpiry}`)
           }
         ]}
       });
@@ -319,7 +319,7 @@ module.exports = {
         jenis_client: id_jenis_client,
         created_at: fn('NOW')
       });
-      CacheControl.postClient;
+      CacheControl.postClient();
       res.status(200).json({
         success: true,
         msg: 'Client berhasil ditambahkan!',
@@ -355,7 +355,7 @@ module.exports = {
       }, {
         where: { id_client: id_client }
       });
-      CacheControl.putClient;
+      CacheControl.putClient();
       res.status(200).json({
         success: true,
         msg: 'data Client berhasil diubah!'
@@ -371,7 +371,7 @@ module.exports = {
       await Client.destroy({
         where: { id_client: id_client }
       });
-      CacheControl.deleteClient;
+      CacheControl.deleteClient();
       res.status(200).json({
         success: true,
         msg: 'data Client berhasil dihapus!'
@@ -419,7 +419,7 @@ module.exports = {
           id_role: '1',
           created_at: fn('NOW')
         });
-        CacheControl.postNewAdmin;
+        CacheControl.postNewAdmin();
         res.status(200).json({
           success: true,
           msg: 'admin berhasil ditambahkan'
