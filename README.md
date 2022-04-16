@@ -5,7 +5,7 @@ RESTFul API untuk Aplikasi Ujian Essay Daring menggunakan tools sebagai berikut:
 - Framework => **Express.js**
 - DBMS => **MySQL**
 - ORM => **Sequelize**
-- Web Server => **MySQL**
+- Web Server => **XAMPP/phpmyadmin**
 
 ## Panduan Instalasi:
 
