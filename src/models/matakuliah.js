@@ -6,6 +6,10 @@ module.exports = (sequelize, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
+        illustrasi_matkul: {
+            type: DataTypes.STRING(50),
+            defaultValue: null
+        },
         kode_matkul: { 
             type: DataTypes.STRING(10),
             unique: true,

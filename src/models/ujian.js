@@ -8,6 +8,10 @@ module.exports = (sequelize, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
+        illustrasi_ujian: {
+            type: DataTypes.STRING(50),
+            defaultValue: null
+        },
         id_jenis_ujian: {
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: true

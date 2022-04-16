@@ -417,6 +417,8 @@ module.exports = {
           password: await hashed(),
           status_civitas: 'aktif',
           id_role: '1',
+          foto_profil: config.auth.defaultProfilePic,
+          keterangan: null,
           created_at: fn('NOW')
         });
         CacheControl.postNewAdmin();

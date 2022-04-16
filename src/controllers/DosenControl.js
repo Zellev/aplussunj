@@ -2,12 +2,13 @@ const { User, Dosen, Matakuliah, Kelas, Paket_soal, Ujian,
         Ref_kel_matkul, Ref_jenis_ujian, Ref_peminatan, 
         Soal_essay, Rel_paketsoal_soal, Rel_mahasiswa_paketsoal, 
         Rel_mahasiswa_kelas, Mahasiswa, Jawaban_mahasiswa } = require('../models');
-const { createKode, paginator, paginatorMN, 
-        shuffleArray, dateFull, todaysdate } = require('../helpers/global');
+const { createKode, paginator, paginatorMN, shuffleArray, 
+        dateFull, todaysdate, pathAll } = require('../helpers/global');
 const { Op, fn, col } = require('sequelize');
 const { ujianValidator, soalValidator } = require('../validator/SearchValidator');
 const { promisify } = require('util');
 const ExcelJS = require('exceljs');
+const sharp = require('sharp');
 const CacheControl = require('../controllers/CacheControl');
 const jp = require('jsonpath');
 const fs = require('fs');
@@ -16,16 +17,6 @@ const pdf = require('html-pdf');
 const unlinkAsync = promisify(fs.unlink);
 const path = require('path');
 const config = require('../config/dbconfig');
-
-const pathAll = (filename, filetype) => {
-  if(filetype === 'xlsx'){
-    return path.join(__dirname,'../../public/fileuploads/xlsxInput/' + filename);
-  } else if(filetype === 'pdf'){
-    return path.join(__dirname,'../../public/pdftemplate/' + filename);
-  } else if(filetype === 'picture'){
-    return path.join(__dirname,'../../public/fileuploads/picInput/gambar_soal/' + filename);
-  }
-}
 
 const getKelas = async (options) => {
   const user = options.req;
@@ -76,18 +67,21 @@ const getHistory = async (user, include) => {
   let obj, data, key;
   if(include === 'ujian'){
     obj = {
-      model: Ujian, as: 'Ujians',
-      attributes: {
-        exclude: ['durasi_per_soal', 'bobot_per_soal', 'status_ujian', 
-        'aktif', 'created_at', 'updated_at']
-      },
-      include: [        
-        {model: Ref_jenis_ujian, as: 'RefJenis', attributes: ['jenis_ujian']},
-        {model: Paket_soal, as: 'Paketsoals', attributes: ['id_paket'], 
-          include: {model: Soal_essay, as: 'Soals', attributes: ['id_soal'], 
-          through: {attributes: []}}
+      model: Kelas, as: 'Kelases',
+      include: {
+        model: Ujian, as: 'Ujians',
+        attributes: {
+          exclude: ['durasi_per_soal', 'bobot_per_soal', 'status_ujian', 
+          'aktif', 'created_at', 'updated_at']
         },
-      ]
+        include: [        
+          {model: Ref_jenis_ujian, as: 'RefJenis', attributes: ['jenis_ujian']},
+          {model: Paket_soal, as: 'Paketsoals', attributes: ['id_paket'], 
+            include: {model: Soal_essay, as: 'Soals', attributes: ['id_soal'], 
+            through: {attributes: []}}
+          },
+        ]
+      }
     }
   } else {
     obj = {
@@ -114,7 +108,8 @@ const getHistory = async (user, include) => {
     nama_lengkap: nama,
   }
   if(include === 'ujian'){
-    data = dosenJson.Ujians.map((i) => {
+    const dataJson = jp.query(dosenJson, '$.Kelases[*].Ujians');
+    data = dataJson.map((i) => {
       return {
         no_ujian: i.id_ujian,
         jenis_ujian: i.RefJenis.jenis_ujian,
@@ -148,6 +143,73 @@ const getHistory = async (user, include) => {
   return {
     dosen: dataDosen,
     [key]: data
+  }
+}
+
+const getHasilUjian = async (user, idUjian) => {
+  const obj = {
+    model: Kelas, as: 'Kelases',
+    include: {
+      model: Ujian, as: 'Ujians',
+      where: {id_ujian: idUjian},
+      attributes: {
+        exclude: ['durasi_per_soal', 'bobot_per_soal', 'status_ujian', 
+        'aktif', 'created_at', 'updated_at']
+      },
+      include: [        
+        {model: Ref_jenis_ujian, as: 'RefJenis', attributes: ['jenis_ujian']},
+        {model: Paket_soal, as: 'Paketsoals', attributes: ['id_paket', 'kode_paket'], 
+          include: [
+            {model: Rel_mahasiswa_paketsoal, as: 'PaketSoal_mhs'},
+            {model: Mahasiswa, as: 'Mahasiswas', attributes: ['id_mhs', 'nama_lengkap']},
+            {model: Soal_essay, as: 'Soals', attributes: ['id_soal'], 
+            through: {attributes: []}}
+          ]
+        },
+      ]
+    }
+  }
+  const dosen = await user.getDosen({ include: obj });
+  const dosenJson = dosen.toJSON();
+  const nama = dosenJson.nama_lengkap.replace(/\w\S*/g, function(txt) {
+      return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+    }
+  );
+  const dataDosen = {
+    username: user.username,
+    nidn: dosenJson.NIDN,
+    nidk: dosenJson.NIDK,
+    nama_lengkap: nama,
+  }
+  const dataJson = jp.query(dosenJson, '$.Kelases[*].Ujians[0]');
+  const dataUjian = dataJson.map((i) => {
+    return {
+      no_ujian: i.id_ujian,
+      jenis_ujian: i.RefJenis.jenis_ujian,
+      judul_ujian: i.judul_ujian,        
+      tanggal_mulai: i.tanggal_mulai,
+      waktu_mulai: i.waktu_mulai,
+      durasi_ujian: i.durasi_ujian,
+      bobot_total: i.bobot_total,
+      deskripsi: i.deskripsi,
+      jml_paket: i.PaketSoals.length,
+      jml_soal: i.PaketSoals[0].Soals.length
+    }
+  });
+  const dataHasil = dataJson.PaketSoals.map((i) => {
+    return {
+      nama_mhs: i.Mahasiswas[0].nama_lengkap,
+      kode_paket: i.kode_paket,
+      nilai_total: i.PaketSoal_mhs.nilai_total,
+      waktu_mulai_pengerjaan: i.PaketSoal_mhs.waktu_mulai,
+      waktu_selesai_pengerjaan: i.PaketSoal_mhs.waktu_selesai,
+      lama_pengerjaan: i.PaketSoal_mhs.lama_pengerjaan,
+    }
+  });
+  return {
+    dataDosen: dataDosen,
+    dataUjian: dataUjian[0],
+    dataHasilUjian: dataHasil
   }
 }
 
@@ -211,6 +273,7 @@ module.exports = {
         });
         return {
           id_kelas: i.id_kelas,
+          thumbnail_kelas: i.illustrasi_kelas,
           kode_seksi: i.kode_seksi,
           matakuliah: matkul.nama_matkul,
           hari: i.hari,
@@ -272,6 +335,7 @@ module.exports = {
       if (!val) { throw createError.NotFound('data matakuliah tidak ditemukan.')}
       const matkul = {
         id_matkul: val.id_matkul,
+        illustrasi_matkul: val.illustrasi_matkul,
         kode_matkul: val.kode_matkul,
         kelompok_Mk: val.KelMk.kelompok_matakuliah,
         peminatan: val.RefPemin.peminatan,
@@ -305,6 +369,7 @@ module.exports = {
       const kelasDosen = kelasJson.Kelases.map((i) => {
         return {
           id_kelas: i.id_kelas,
+          thumbnail_kelas: i.illustrasi_kelas,
           kode_seksi: i.kode_seksi,
           matakuliah: i.Matkul.nama_matkul,
           hari: i.hari,
@@ -388,14 +453,16 @@ module.exports = {
   async setUjian(req, res, next){
     try {
       const idKelas = req.body.id_kelas;
-      const { judul_ujian, jenis_ujian, tanggal_mulai, waktu_mulai, durasi_ujian, 
-              durasi_per_soal, bobot_per_soal, bobot_total, deskripsi } = req.body;
+      const { illustrasi_ujian, judul_ujian, jenis_ujian, tanggal_mulai, 
+              waktu_mulai, durasi_ujian, durasi_per_soal, bobot_per_soal, 
+              bobot_total, deskripsi } = req.body;
       const refJenis = await Ref_jenis_ujian.findOne({
         attributes:['id_jenis_ujian','jenis_ujian'],
         where: {jenis_ujian: jenis_ujian}
       });
       // pkCheck(idKelas, date, waktu_mulai);
-      const ujian = await Ujian.create({        
+      const ujian = await Ujian.create({
+        illustrasi_ujian: illustrasi_ujian || config.auth.defaultBannerPic,
         judul_ujian: judul_ujian,
         id_jenis_ujian: refJenis.id_jenis_ujian,
         tanggal_mulai: tanggal_mulai,
@@ -428,15 +495,17 @@ module.exports = {
       const kdPaket = createKode(config.codegen.panjang_kode_paket);
       const idKelas = req.body.id_kelas;
       let idPaket;        
-      const { judul_ujian, jenis_ujian, tanggal_mulai, waktu_mulai, durasi_ujian, durasi_per_soal, 
-              bobot_per_soal, bobot_total, status_ujian, deskripsi, id_soal, bobot_soal, kata_kunci_soal,
-              tipe_penilaian } = req.body;
+      const { illustrasi_ujian, judul_ujian, jenis_ujian, tanggal_mulai, 
+              waktu_mulai, durasi_ujian, durasi_per_soal, bobot_per_soal, 
+              bobot_total, status_ujian, deskripsi, id_soal, bobot_soal, 
+              kata_kunci_soal, tipe_penilaian } = req.body;
       const refJenis = await Ref_jenis_ujian.findOne({
         attributes:['id_jenis_ujian','jenis_ujian'],
         where:{jenis_ujian:jenis_ujian}
       });
       // await pkCheck(idKelas, date, waktu_mulai);      
       await Ujian.create({
+        illustrasi_ujian: illustrasi_ujian || config.auth.defaultBannerPic,
         judul_ujian: judul_ujian,
         id_jenis_ujian: refJenis.id_jenis_ujian,
         tanggal_mulai: tanggal_mulai,
@@ -793,6 +862,7 @@ module.exports = {
       const vals = result.results.map((i) => {
         return {
           id_ujian: i.id_ujian,
+          thumbnail_ujian: i.illustrasi_ujian,
           jenis_ujian: i.RefJenis.jenis_ujian,
           judul_ujian: i.judul_ujian,
           tanggal_mulai: i.tanggal_mulai,
@@ -836,6 +906,7 @@ module.exports = {
       if(kelasExist){
         const data = {
           id_ujian: ujian.id_ujian,
+          banner_ujian: ujian.illustrasi_ujian,
           jenis_ujian: ujian.RefJenis.jenis_ujian,
           judul_ujian: ujian.judul_ujian,
           tanggal_mulai: ujian.tanggal_mulai,
@@ -935,7 +1006,7 @@ module.exports = {
     try {
       const ujian = await getHistory(req.user, 'ujian');
       const newWB = new ExcelJS.Workbook();
-      const newWS = newWB.addWorksheet('Status_app');      
+      const newWS = newWB.addWorksheet('Detail_ujian');      
       var reColumns = [
         {header:'No. Ujian', key:'no_ujian', style:{font:{name: 'Times New Roman'}}},
         {header:'Jenis Ujian', key:'jenis_ujian', style:{font:{name: 'Times New Roman'}}},
@@ -1023,6 +1094,7 @@ module.exports = {
       const vals = result.results.map((i) => {
         return {
           id_ujian: i.id_ujian,
+          thumbnail_ujian: i.illustrasi_ujian,
           jenis_ujian: i.RefJenis.jenis_ujian,
           judul_ujian: i.judul_ujian,
           tanggal_mulai: i.tanggal_mulai,
@@ -1045,7 +1117,7 @@ module.exports = {
 
   async putUjian(req, res, next){
     try {
-      const { jenis_ujian, judul_ujian, tanggal_mulai, waktu_mulai, durasi_ujian, 
+      const { illustrasi_ujian, jenis_ujian, judul_ujian, tanggal_mulai, waktu_mulai, durasi_ujian, 
               durasi_per_soal, bobot_per_soal, bobot_total, status, aktif, deskripsi } = req.body;
       const { id_ujian } = req.params;
       const dosen = await req.user.getDosen({
@@ -1065,6 +1137,7 @@ module.exports = {
           where:{jenis_ujian:jenis_ujian}
         });
         let updateVal = {
+          illustrasi_ujian: illustrasi_ujian || config.auth.defaultBannerPic,
           judul_ujian: judul_ujian,
           jenis_ujian: jenisUjian.id_jenis_ujian,
           tanggal_mulai: tanggal_mulai,
@@ -1215,6 +1288,122 @@ module.exports = {
       next(error);
     }
   },
+
+  async printHasilUjianPdf(req, res, next){
+    try {
+      const idUjian = req.params.id_ujian;
+      const ujian = await getHasilUjian(req.user, idUjian);
+      const options = {format: 'A4'};
+      const tanggal = dateFull();
+      const img = 'data:image/png;base64,' + fs
+          .readFileSync(path.resolve(__dirname,'../../public/pdftemplate','kop_surat.png'))
+          .toString('base64');
+      res.render(pathAll('hasil_ujian_dosen.hbs', 'pdf'), {
+        kop_surat: img,
+        data_dosen: ujian.dataDosen,
+        data_ujian: ujian.dataUjian,
+        data_hasilUjian: ujian.dataHasilUjian,
+        tanggal: tanggal,
+        helpers: {
+          incremented(index) {
+            index++;
+            return index;
+          }
+        }
+      }, function (err, HTML) {
+        if(err) return createError.internal('Error while reading Handlebars: '+ err);
+        pdf.create(HTML, options).toBuffer(function (err, buffer) {
+          if (err) {
+            return createError.BadRequest('Error while generating PDF: '+ err);
+          }
+          const output = ((val) => {
+            res.writeHead(200, {
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-ujian.pdf"`
+            })
+            const download = Buffer.from(val);
+            res.end(download);
+          });
+          output(buffer);
+        })
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async printHasilUjianXcel(req, res, next){
+    try {
+      const idUjian = req.params.id_ujian;
+      const ujian = await getHasilUjian(req.user, idUjian);
+      const newWB = new ExcelJS.Workbook();
+      const newWS = newWB.addWorksheet('Hasil_ujian'); 
+      var reColumns = [
+        {header:'No.', key:'no_ujian', style:{font:{name: 'Times New Roman'}}},
+        {header:'Nama Mahasiswa', key:'jenis_ujian', style:{font:{name: 'Times New Roman'}}},
+        {header:'Kode Paket', key:'judul_ujian', style:{font:{name: 'Times New Roman'}}},        
+        {header:'Waktu Mulai Pengerjaan', key:'tanggal_mulai', style:{font:{name: 'Times New Roman'}}},
+        {header:'Waktu Selesai Pengerjaan', key:'waktu_mulai', style:{font:{name: 'Times New Roman'}}},
+        {header:'Nilai Total', key:'durasi_ujian', style:{font:{name: 'Times New Roman'}}}
+      ];
+      newWS.columns = reColumns;
+      newWS.addRows(ujian.dataHasilUjian);
+      newWS.getCell('L1').value = 'Nama Lengkap :';
+      newWS.getCell('L2').value = 'NIDN :';
+      newWS.getCell('L3').value = 'NIDK :';
+      newWS.getCell('L4').value = 'Username :';
+      newWS.mergeCells('M1:R1');
+      newWS.getCell('M1').value = ujian.dosen.nama_lengkap;
+      newWS.getCell('M1').alignment = { horizontal:'left'} ;
+      newWS.mergeCells('M2:R2');
+      newWS.getCell('M2').value = ujian.dosen.nidn;
+      newWS.getCell('M2').alignment = { horizontal:'left'} ;
+      newWS.mergeCells('M3:R3');
+      newWS.getCell('M3').value = ujian.dosen.nidk;
+      newWS.getCell('M3').alignment = { horizontal:'left'} ;
+      newWS.mergeCells('M4:R4');
+      newWS.getCell('M4').value = ujian.dosen.username;
+      newWS.getCell('M4').alignment = { horizontal:'left'} ;
+      newWS.getCell('L6').value = 'Judul Ujian :';
+      newWS.getCell('L7').value = 'Jenis Ujian :';
+      newWS.getCell('L8').value = 'Tanggal Mulai :';
+      newWS.getCell('L9').value = 'Waktu Mulai :';
+      newWS.getCell('L10').value = 'Jumlah Paket :';
+      newWS.getCell('L11').value = 'Jumlah Soal per Paket :';
+      newWS.mergeCells('M6:R6');
+      newWS.getCell('M6').value = ujian.dataUjian.judul_ujian;
+      newWS.getCell('M6').alignment = { horizontal:'left'} ;
+      newWS.mergeCells('M7:R7');
+      newWS.getCell('M7').value = ujian.dataUjian.jenis_ujian;
+      newWS.getCell('M7').alignment = { horizontal:'left'} ;
+      newWS.mergeCells('M8:R8');
+      newWS.getCell('M8').value = ujian.dataUjian.tanggal_mulai;
+      newWS.getCell('M8').alignment = { horizontal:'left'} ;
+      newWS.mergeCells('M9:R9');
+      newWS.getCell('M9').value = ujian.dataUjian.waktu_mulai;
+      newWS.getCell('M9').alignment = { horizontal:'left'} ;
+      newWS.mergeCells('M10:R10');
+      newWS.getCell('M10').value = ujian.dataUjian.jml_paket;
+      newWS.getCell('M10').alignment = { horizontal:'left'} ;
+      newWS.mergeCells('M11:R11');
+      newWS.getCell('M11').value = ujian.dataUjian.jml_soal;
+      newWS.getCell('M11').alignment = { horizontal:'left'} ;
+      newWS.mergeCells('L12:R12');
+      newWS.getCell('L12').value = 'tertanggal, ' + dateFull();
+      newWS.getCell('L12').alignment = { horizontal:'center'} ;
+      const output = ((val)=>{
+        res.writeHead(200,{       
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-ujian.xlsx"`
+        })
+        const download = Buffer.from(val);
+        res.end(download);
+      })
+      output(await newWB.xlsx.writeBuffer());
+    } catch (error) {
+      next(error);
+    }
+  },
   // PaketSoal operation
   async getPaketSoal(req, res, next){
     try {
@@ -1244,7 +1433,7 @@ module.exports = {
   async getPkSoalMhs(req, res, next){
     try {
       const idPaket = req.params.id_paket;
-      const paket = await Rel_mahasiswa_paketsoal.findOne({
+      const paket = await Rel_mahasiswa_paketsoal.findAll({
         where: {id_paket: idPaket},
         include: [
           {model: Mahasiswa, as: 'Mahasiswa', attributes: ['id_mhs','NIM','nama_lengkap']},
@@ -1252,11 +1441,22 @@ module.exports = {
         ]
       });
       if(!paket) throw createError.NotFound('data paket-soal tidak ditemukan');
-      CacheControl.getPaketSoalMhs(req);
+      CacheControl.getPaketSoalMhs(req);    
+      const data = paket.map((i) => { 
+        return {
+          id_mhs: i.id_mhs,
+          id_paket: i.id_paket,
+          nilai_total: i.nilai_total,
+          waktu_mulai_pengerjaan: i.waktu_mulai,
+          waktu_selesai_pengerjaan: i.waktu_selesai,
+          lama_pengerjaan: i.lama_pengerjaan,
+          paket_soal: i.PaketSoal,
+          mahasiswa: i.Mahasiswa
+        }
+      })
       res.status(200).json({
         success: true,
-        paket_soal: paket.PaketSoal,
-        relasi_mahasiswa: paket.Mahasiswa
+        data: data
       });
     } catch (error) {
       next(error);
@@ -1597,19 +1797,30 @@ module.exports = {
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Soal_adder');
       let data = [], imgArray = [];
-      for (const image of ws.getImages()) {            
-        const img = workbook.model.media.find(m => m.index === image.imageId);
-        const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
-        const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'picture');
-        fs.appendFileSync(picPath, img.buffer);
-        imgArray.push({[row]:`${row}.${col}.${img.name}.${img.extension}`});
-        picPatharr.push(picPath);
-      }
-      imgArray = imgArray.reduce((acc, element) => { // groupBy key
-        const [key, val] = Object.entries(element)[0];
-        (acc[key] || (acc[key] = [])).push(val);
-        return acc;
-      }, []);
+      if(ws.getImages().length) {
+        for (const image of ws.getImages()) {            
+          const img = workbook.model.media.find(m => m.index === image.imageId);
+          const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
+          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-soal');
+          const scaleBy2 = await sharp(img.buffer).metadata()
+          .then(({ width, height }) => sharp(img.buffer)
+            .resize(Math.round(width * 2), Math.round(height * 2))
+            .sharpen()
+            .toFile(picPath)
+          );
+          if(scaleBy2 instanceof Error) {
+            console.error(scaleBy2);
+            throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
+          }
+          imgArray.push({[row]:`${row}.${col}.${img.name}.${img.extension}`});
+          picPatharr.push(picPath);
+        }
+        imgArray = imgArray.reduce((acc, element) => { // groupBy key
+          const [key, val] = Object.entries(element)[0];
+          (acc[key] || (acc[key] = [])).push(val);
+          return acc;
+        }, []);
+      }      
       let opt = {
         req: req.user,
         id_matkul: id_matkul
@@ -1620,8 +1831,8 @@ module.exports = {
         for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
           if(rowNum > 1){
           let row = ws.getRow(rowNum).values
-          let img = imgArray[rowNum-1];          
-          !img ? img = []: img = imgArray[rowNum-1];           
+          let img = imgArray[rowNum-1];
+          if(!img) img = [];
             data.push({
               id_matkul: id_matkul,
               id_dosen: dosen.id_dosen,
@@ -1647,7 +1858,7 @@ module.exports = {
       if(req.files.soal_bulk) {
         await unlinkAsync(req.files.soal_bulk[0].path);
       }
-      if(picPatharr.length ){
+      if(picPatharr.length){
         for(let i of picPatharr){
           await unlinkAsync(i);
         }
@@ -2041,19 +2252,30 @@ module.exports = {
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Soal_updater');
       let data = [], imgArray = [];
-      for (const image of ws.getImages()) {            
-        const img = workbook.model.media.find(m => m.index === image.imageId);
-        const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
-        const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'picture');
-        fs.appendFileSync(picPath, img.buffer);
-        imgArray.push({[row]:`${row}.${col}.${img.name}.${img.extension}`});
-        picPatharr.push(picPath);
-      }
-      imgArray = imgArray.reduce((acc, element) => { // groupBy key
-        const [key, val] = Object.entries(element)[0];
-        (acc[key] || (acc[key] = [])).push(val);
-        return acc;
-      }, []);
+      if(ws.getImages().length) {
+        for (const image of ws.getImages()) {            
+          const img = workbook.model.media.find(m => m.index === image.imageId);
+          const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
+          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-soal');
+          const scaleBy2 = await sharp(img.buffer).metadata()
+          .then(({ width, height }) => sharp(img.buffer)
+            .resize(Math.round(width * 2), Math.round(height * 2))
+            .sharpen()
+            .toFile(picPath)
+          );
+          if(scaleBy2 instanceof Error) {
+            console.error(scaleBy2);
+            throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
+          }
+          imgArray.push({[row]:`${row}.${col}.${img.name}.${img.extension}`});
+          picPatharr.push(picPath);
+        }
+        imgArray = imgArray.reduce((acc, element) => { // groupBy key
+          const [key, val] = Object.entries(element)[0];
+          (acc[key] || (acc[key] = [])).push(val);
+          return acc;
+        }, []);
+      }      
       let opt = {
         req: req.user,
         id_matkul: id_matkul
@@ -2063,20 +2285,11 @@ module.exports = {
       if(matkulExist){
         for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
           if(rowNum > 1){
-          let row = ws.getRow(rowNum).values
-          let img = imgArray[rowNum-1];
-          if(img){
-            img = await Soal_essay.findOne({
-              attributes: ['gambar_soal'],
-              where: {id_soal: row[1]},
-              raw: true
-            }).then((i) => { return i.gambar_soal });
-          } else {
-            img = imgArray[rowNum-1];
-          }
-          row[6] = row[6] ?? null;
-          row[7] = row[7] ?? null;
-            data.push({
+            let row = ws.getRow(rowNum).values
+            let img = imgArray[rowNum-1];            
+            row[6] = row[6] ?? null;
+            row[7] = row[7] ?? null;
+            const obj = {
               id_soal: row[1],
               id_matkul: id_matkul,
               id_dosen: dosen.id_dosen,
@@ -2086,7 +2299,9 @@ module.exports = {
               video_soal: row[7],
               status: row[8],
               updated_at: fn('NOW')
-            });
+            }
+            if(!img) delete obj.gambar_soal
+            data.push(obj);
           }
         }
       } else {

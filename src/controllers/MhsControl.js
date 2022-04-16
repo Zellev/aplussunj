@@ -1,7 +1,7 @@
 const { User, Mahasiswa, Dosen, Kelas, Matakuliah, Ujian, 
         Paket_soal, Soal_essay, Jawaban_mahasiswa, Rel_paketsoal_soal, 
         Rel_mahasiswa_paketsoal, Ref_jenis_ujian } = require('../models');
-const { paginator, todaysdate, dateFull, timeDiff } = require('../helpers/global');
+const { paginator, todaysdate, dateFull, timeDiff, pathAll } = require('../helpers/global');
 const { jawabanValidator } = require('../validator/SearchValidator');
 const { Op, fn, col } = require('sequelize');
 const jp = require('jsonpath');
@@ -10,10 +10,6 @@ const CacheControl = require('../controllers/CacheControl');
 const pdf = require('html-pdf');
 const ExcelJS = require('exceljs');
 const path = require('path');
-
-const pathAll = (filename) => {
-  return path.join(__dirname,'../../public/pdftemplate/' + filename);
-}
 
 const getJwbn = async (options) => {
   let obj;
@@ -120,6 +116,7 @@ module.exports = {
         });
         return {
           id_kelas: i.id_kelas,
+          thumbnail_kelas: i.illustrasi_kelas,
           kode_seksi: i.kode_seksi,
           matakuliah: matkul.nama_matkul,
           hari: i.hari,
@@ -132,6 +129,7 @@ module.exports = {
         return {
           id_paket: i.id_paket,
           kode_paket: i.kode_paket,
+          thumbnail_ujian: i.Ujian.illustrasi_ujian,
           jenis_ujian: i.Ujian.RefJenis.jenis_ujian,
           judul_ujian: i.Ujian.judul_ujian,
           tanggal_mulai: i.tanggal_mulai,
@@ -258,7 +256,7 @@ module.exports = {
       const img = 'data:image/png;base64,' + require('fs')
           .readFileSync(path.resolve(__dirname,'../../public/pdftemplate','kop_surat.png'))
           .toString('base64');
-      res.render(pathAll('ujian_mhs.hbs'), {
+      res.render(pathAll('ujian_mhs.hbs', 'pdf'), {
         kop_surat: img,
         data_mhs: pkSoal.mhs,
         data: pkSoal.pksoal,
@@ -359,6 +357,7 @@ module.exports = {
       const kelasMhs = mhs.Kelases.map((i) => {
         return {
           id_kelas: i.id_kelas,
+          thumbnail_kelas: i.illustrasi_kelas,
           kode_seksi: i.kode_seksi,
           matakuliah: i.Matkul.nama_matkul,
           hari: i.hari,
@@ -579,6 +578,7 @@ module.exports = {
       const data = {
         id_paket: json.id_paket,
         kode_paket: json.kode_paket,
+        banner_ujian: json.Ujian.illustrasi_ujian,
         jenis_ujian: json.Ujian.RefJenis.jenis_ujian,
         judul_ujian: json.Ujian.judul_ujian,
         jml_soal: json.Soals.length,
@@ -695,6 +695,7 @@ module.exports = {
         return {
           id_paket: i.id_paket,
           kode_paket: i.kode_paket,
+          thumbnail_ujian: i.Ujian.illustrasi_ujian,
           nilai_akhir: i.Rel_mahasiswa_paketsoal.nilai_total,
           lama_pengerjaan: i.Rel_mahasiswa_paketsoal.lama_pengerjaan,
           judul_ujian: i.Ujian.judul_ujian,
@@ -750,7 +751,8 @@ module.exports = {
       const data = paket.results[0].PaketSoals.map((i) => {
         return {
           id_paket: i.id_paket,
-          kode_paket: i.kode_paket,          
+          kode_paket: i.kode_paket,
+          thumbnail_ujian: i.Ujian.illustrasi_ujian,
           jenis_ujian: i.Ujian.RefJenis.jenis_ujian,
           judul_ujian: i.Ujian.judul_ujian,
           tanggal_mulai: i.Ujian.tanggal_mulai,

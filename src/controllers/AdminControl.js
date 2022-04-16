@@ -1,28 +1,22 @@
 const { User, Dosen, Mahasiswa, Captcha, Lupa_pw, Matakuliah, Kelas, 
         Paket_soal, Token_history, Ujian, Notifikasi, Pengumuman, 
-        Ref_kel_matkul, Ref_peminatan, Ref_semester, Ref_role, 
-        Ref_jenis_ujian,  Rel_mahasiswa_paketsoal } = require('../models');
+        Ref_kel_matkul, Ref_peminatan, Ref_semester, Ref_illustrasi, 
+        Ref_role, Ref_jenis_ujian, Rel_mahasiswa_paketsoal } = require('../models');
 const config = require('../config/dbconfig');
 const path = require('path');
 const ExcelJS = require('exceljs');
+const sharp = require('sharp');
 const CacheControl = require('../controllers/CacheControl');
 const pdf = require('html-pdf');
 const fs = require('fs');
 const createError = require('../errorHandlers/ApiErrors');
 const { promisify } = require('util');
 const unlinkAsync = promisify(fs.unlink);
-const { paginator, shuffleArray, todaysdate, dateFull, hashed } = require('../helpers/global');
+const { paginator, shuffleArray, todaysdate, 
+        dateFull, hashed, randomPic, pathAll } = require('../helpers/global');
 const { userValidator, dosenValidator, mhsValidator, 
         ujianValidator, matkulValidator } = require('../validator/SearchValidator');
 const { Op, fn } = require('sequelize');
-
-const pathAll = (filename, filetype) => {
-  if(filetype === 'xlsx'){
-    return path.join(__dirname,'../../public/fileuploads/xlsxInput/' + filename);
-  } else if(filetype === 'pdf'){
-    return path.join(__dirname,'../../public/pdftemplate/' + filename);
-  }  
-}
 
 const getUser = async obj => {
   return User.findOne({
@@ -341,6 +335,24 @@ module.exports = {
     }
   },
 
+  async patchUserPw(req, res, next) {
+    try {
+      const idUser = req.params.id_user;
+      await User.update({
+        password: await hashed(),
+        updated_at: fn('NOW')
+      }, {
+        where: { id: idUser }
+      });
+      res.status(200).json({
+        success: true,
+        msg: `password user ${idUser} berhasil direset`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async deleteUser(req, res, next) {
     try {
         const { id_user } = req.params;
@@ -414,7 +426,7 @@ module.exports = {
             status_civitas: 'aktif',
             password: await hashed(),
             id_role: '2',
-            foto_profil: null,
+            foto_profil: config.auth.defaultProfilePic,
             keterangan: null,
             created_at: fn('NOW'),
             Dosen: {
@@ -436,6 +448,8 @@ module.exports = {
             status_civitas: 'aktif',
             password: await hashed(),
             id_role: '3',
+            foto_profil: config.auth.defaultProfilePic,
+            keterangan: null,
             created_at: fn('NOW'),
             Mahasiswa: {
                 NIM: NIM,
@@ -959,12 +973,14 @@ module.exports = {
   async setMatkul(req, res, next){
     try {
       const { kode_matkul, id_kel_mk, id_peminatan, nama_matkul, sks, deskripsi } = req.body;
+      const illustrasi_matkul = req.file.filename || config.auth.defaultGlobalPic;
       const matkul = await Matakuliah.findOne({
         where: {kode_matkul: kode_matkul}, 
         attributes: ['id_matkul']
       });
       if(matkul) throw createError.Conflict('kode matkul sudah terdaftar!');
       await Matakuliah.create({
+        illustrasi_matkul: illustrasi_matkul,
         kode_matkul: kode_matkul,
         id_kel_mk: id_kel_mk,
         id_peminatan: id_peminatan,
@@ -983,39 +999,64 @@ module.exports = {
   },
 
   async setMatkulbulk(req, res, next) {
+    let picPatharr = [];
     try {
       if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      let data = [];
+      let data = [], imgArray = [];
       const excelFile = pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Matakuliah');
+      if(ws.getImages().length) {
+        for (const image of ws.getImages()) {            
+          const img = workbook.model.media.find(m => m.index === image.imageId);
+          const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
+          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-matkul');
+          const thumbPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-thumbnail');
+          const scaleBy2 = await sharp(img.buffer).metadata()
+          .then(({ width, height }) => sharp(img.buffer)
+            .resize(Math.round(width * 2), Math.round(height * 2))
+            .sharpen()
+            .toFile(picPath)
+          );
+          if(scaleBy2 instanceof Error) {
+            console.error(scaleBy2);
+            throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
+          }
+          fs.appendFileSync(thumbPath, img.buffer);
+          imgArray.push(`${row}.${col}.${img.name}.${img.extension}`);
+          picPatharr.push(picPath);
+        }
+      }      
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
           let row = ws.getRow(rowNum).values
-          row[3] = row[3] ?? null;
-          row[6] = row[6] ?? null;
+          let img = imgArray[rowNum-1];
+          if(!img) img = config.auth.defaultGlobalPic;
+          row[4] = row[4] ?? null;
+          row[7] = row[7] ?? null;
           let val = {
             getKelmk: await Ref_kel_matkul.findOne({
               attributes: ['id_kel_mk','kelompok_matakuliah'],
-              where: {kelompok_matakuliah: row[2]}
+              where: {kelompok_matakuliah: row[3]}
             }),
             getPemin: await Ref_peminatan.findOne({
               attributes: ['id_peminatan','peminatan'],
-              where: {peminatan: row[3]}
+              where: {peminatan: row[4]}
             }),
           }
-          if(!val.getKelmk) throw createError.NotFound(`kelompok matakuliah untuk data ${row[2]} tidak ditemukan.`)
-          if(!val.getPemin) throw createError.NotFound(`peminatan untuk data ${row[3]} tidak ditemukan.`)
+          if(!val.getKelmk) throw createError.NotFound(`kelompok matakuliah untuk data ${row[3]} tidak ditemukan.`)
+          if(!val.getPemin) throw createError.NotFound(`peminatan untuk data ${row[4]} tidak ditemukan.`)
           data.push({
-            kode_matkul: row[1],
+            illustrasi_matkul: img,
+            kode_matkul: row[2],
             id_kel_mk: val.getKelmk.id_kel_mk,
             id_peminatan: val.getPemin.id_peminatan,
-            nama_matkul: row[4],
-            sks: row[5],
-            deskripsi: row[6]
+            nama_matkul: row[5],
+            sks: row[6],
+            deskripsi: row[7]
           })
         }
       }
@@ -1029,6 +1070,11 @@ module.exports = {
       if(req.file) {
         await unlinkAsync(req.file.path);
       }
+      if(picPatharr.length){
+        for(let i of picPatharr){
+          await unlinkAsync(i);
+        }
+      }
       next(error);
     }
   },
@@ -1038,8 +1084,10 @@ module.exports = {
       const { id_matkul } = req.params;
       const { kode_matkul, id_kel_mk, id_peminatan, nama_matkul, sks, deskripsi } = req.body;
       const mk = await Matakuliah.findByPk(id_matkul);
+      const illustrasi_matkul = req.file.filename || mk.illustrasi_matkul;     
       if (!mk){throw createError.NotFound('data matakuliah tidak ditemukan.')}
       let updateVal = {
+          illustrasi_matkul: illustrasi_matkul,
           kode_matkul: kode_matkul,
           id_kel_mk: id_kel_mk,
           id_peminatan: id_peminatan,
@@ -1061,46 +1109,72 @@ module.exports = {
   },
 
   async putMatkulbulk(req, res, next) {
+    let picPatharr = [];
     try {
       if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      let updateVal = [];
+      let updateVal = [], imgArray = [];
       const excelFile = pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Matakuliah_updater');
+      if(ws.getImages().length) {
+        for (const image of ws.getImages()) {            
+          const img = workbook.model.media.find(m => m.index === image.imageId);
+          const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
+          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-matkul');
+          const thumbPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-thumbnail');
+          const scaleBy2 = await sharp(img.buffer).metadata()
+          .then(({ width, height }) => sharp(img.buffer)
+            .resize(Math.round(width * 2), Math.round(height * 2))
+            .sharpen()
+            .toFile(picPath)
+          );
+          if(scaleBy2 instanceof Error) {
+            console.error(scaleBy2);
+            throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
+          }
+          fs.appendFileSync(thumbPath, img.buffer);
+          imgArray.push(`${row}.${col}.${img.name}.${img.extension}`);
+          picPatharr.push(picPath);
+        }
+      }
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
           let row = ws.getRow(rowNum).values
-          row[4] = row[4] ?? null;
-          row[7] = row[7] ?? null;
+          let img = imgArray[rowNum-1];
+          row[5] = row[5] ?? null;
+          row[8] = row[8] ?? null;
           let val = {
             getKelmk: await Ref_kel_matkul.findOne({
               attributes: ['id_kel_mk','kelompok_matakuliah'],
-              where: {kelompok_matakuliah: row[3]}
+              where: {kelompok_matakuliah: row[4]}
             }),
             getPemin: await Ref_peminatan.findOne({
               attributes: ['id_peminatan','peminatan'],
-              where: {peminatan: row[4]}
+              where: {peminatan: row[5]}
             }),
           }
-          if(!val.getKelmk) throw createError.NotFound(`kelompok matakuliah untuk data ${row[3]} tidak ditemukan.`)
-          if(!val.getPemin) throw createError.NotFound(`peminatan untuk data ${row[4]} tidak ditemukan.`)
-          updateVal.push({
+          if(!val.getKelmk) throw createError.NotFound(`kelompok matakuliah untuk data ${row[4]} tidak ditemukan.`)
+          if(!val.getPemin) throw createError.NotFound(`peminatan untuk data ${row[5]} tidak ditemukan.`)
+          const data = {
             id_matkul: row[1],
-            kode_matkul: row[2],
+            illustrasi_matkul: img,
+            kode_matkul: row[3],
             id_kel_mk: val.getKelmk.id_kel_mk,
             id_peminatan: val.getPemin.id_peminatan,
-            nama_matkul: row[4],
-            sks: row[6],
-            deskripsi: row[7],
+            nama_matkul: row[6],
+            sks: row[7],
+            deskripsi: row[8],
             updated_at: fn('NOW')
-          })
+          }
+          if(!img) delete data.illustrasi_matkul;
+          updateVal.push(data)
         }
       }
       await Matakuliah.bulkCreate(updateVal, {
-        updateOnDuplicate: [ 'id_matkul','kode_matkul','id_kel_mk',
+        updateOnDuplicate: [ 'id_matkul', 'illustrasi_matkul', 'kode_matkul', 'id_kel_mk',
           'id_peminatan','nama_matkul', 'sks','deskripsi','updated_at' ]
       });
       CacheControl.putMatkul();
@@ -1111,6 +1185,11 @@ module.exports = {
     } catch (error) {
       if(req.file) {
         await unlinkAsync(req.file.path);
+      }
+      if(picPatharr.length){
+        for(let i of picPatharr){
+          await unlinkAsync(i);
+        }
       }
       next(error);
     }
@@ -1343,7 +1422,7 @@ module.exports = {
   async setKelas(req, res, next){
     try {
       let val = [], nidk = [], desc;
-      const { kode_seksi, id_dosen1, id_dosen2, id_dosen3, id_matkul, 
+      const { illustrasi_kelas, kode_seksi, id_dosen1, id_dosen2, id_dosen3, id_matkul, 
               id_semester, hari, jam, deskripsi } = req.body;
       const objKelas = await Kelas.findOne({
         where: {kode_seksi: kode_seksi}, 
@@ -1353,8 +1432,10 @@ module.exports = {
       val[0] = await Dosen.findByPk(id_dosen1);
       !id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(id_dosen2);
       !id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(id_dosen3);
-      deskripsi === "" ? desc = null : desc = deskripsi; 
+      deskripsi === "" ? desc = null : desc = deskripsi;
+      const img = illustrasi_kelas || await randomPic() || config.auth.defaultBannerPic;
       const kelas = await Kelas.create({
+        illustrasi_kelas: img,
         kode_seksi: kode_seksi,
         id_matkul: id_matkul,
         id_semester: id_semester,
@@ -1380,7 +1461,7 @@ module.exports = {
   },
 
   async setKelasbulk(req, res, next) {
-    let kdSeksi = [];
+    let kdSeksi = [], picPatharr = [];
     try {
       if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
@@ -1389,36 +1470,61 @@ module.exports = {
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Kelas');
+      let imgArray = [];
+      if(ws.getImages().length){
+        for (const image of ws.getImages()) {            
+          const img = workbook.model.media.find(m => m.index === image.imageId);
+          const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
+          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-banner');
+          const thumbPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-thumbnail');
+          const scaleBy2 = await sharp(img.buffer).metadata()
+          .then(({ width, height }) => sharp(img.buffer)
+            .resize(Math.round(width * 2), Math.round(height * 2))
+            .sharpen()
+            .toFile(picPath)
+          );
+          if(scaleBy2 instanceof Error) {
+            console.error(scaleBy2);
+            throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
+          }
+          fs.appendFileSync(thumbPath, img.buffer);
+          imgArray.push(`${row}.${col}.${img.name}.${img.extension}`);
+          picPatharr.push(picPath);
+        }
+      }
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
           let row = ws.getRow(rowNum).values;
-          row[3] = row[3] ?? null;
-          row[6] = row[6] ?? null;
+          let img = imgArray[rowNum-1];
+          if(!img) img = await randomPic() || config.auth.defaultBannerPic;
+          row[4] = row[4] ?? null;
+          row[7] = row[7] ?? null;
           let getMk = await Matakuliah.findOne({
             attributes: ['id_matkul','nama_matkul'],
-            where: {nama_matkul: row[2]}
+            where: {nama_matkul: row[3]}
           });
           let getSemester = await Ref_semester.findOne({
             attributes: ['id_semester','semester'],
-            where: {semester: row[3]}
+            where: {semester: row[4]}
           });
-          if(!getMk) throw createError.NotFound(`matakuliah untuk data ${row[2]} tidak ditemukan.`)
-          if(!getSemester) throw createError.NotFound(`semester untuk data ${row[3]} tidak ditemukan.`)                   
+          if(!getMk) throw createError.NotFound(`matakuliah untuk data ${row[3]} tidak ditemukan.`)
+          if(!getSemester) throw createError.NotFound(`semester untuk data ${row[4]} tidak ditemukan.`)                   
           let kelas = await Kelas.create({
-            kode_seksi: row[1],
+            illustrasi_kelas: img,
+            kode_seksi: row[2],
             id_matkul: getMk.id_matkul,
             id_semester: getSemester.id_semester,
-            hari: row[4],
-            jam: row[5],
-            deskripsi: row[6]
+            hari: row[5],
+            jam: row[6],
+            deskripsi: row[7]
           });
-          if(!row[7]) {
-            kdSeksi.push(row[1]);
-            throw createError.BadRequest(`dosen 1 pada kelas ${row[1]} tidak boleh kosong!`);            
+          if(!row[8]) {
+            kdSeksi.push(row[2]);
+            throw createError.BadRequest(`dosen 1 pada kelas ${row[2]} tidak boleh kosong!`);            
           }
           for(let i = 0; i < 3; i++){
-            if(row[7+i]){
-              let idDosen = await dosen(Dosen, row[7+i]);
+            if(row[8+i]){
+              let idDosen = await dosen(Dosen, row[8+i]);
               kelas.addDosen(idDosen.id_dosen)
             }
           }
@@ -1434,7 +1540,12 @@ module.exports = {
         await unlinkAsync(req.file.path);
         if(kdSeksi.length > 0) {
           await Kelas.destroy({where: {kode_seksi: kdSeksi}});
-        }        
+        }
+        if(picPatharr.length){
+          for(let i of picPatharr){
+            await unlinkAsync(i);
+          }
+        }
       }
       next(error);
     }
@@ -1443,8 +1554,8 @@ module.exports = {
   async putKelas(req, res, next) {
     try {
       const { id_kelas } = req.params;
-      const { kode_seksi, id_dosen1, id_dosen2, id_dosen3, id_matkul, 
-              id_semester, hari, jam, deskripsi } = req.body;
+      const { illustrasi_kelas, kode_seksi, id_dosen1, id_dosen2, id_dosen3, 
+              id_matkul, id_semester, hari, jam, deskripsi } = req.body;
       let val = [], temp = [];
       const getKelas = await Kelas.findByPk(id_kelas)
       if (!getKelas){
@@ -1453,7 +1564,9 @@ module.exports = {
       val[0] = await Dosen.findByPk(id_dosen1);
       !id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(id_dosen2);
       !id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(id_dosen3);
+      const img = illustrasi_kelas || await randomPic() || config.auth.defaultBannerPic;
       let updateVal = {
+          illustrasi_kelas: img,
           kode_seksi: kode_seksi,
           id_matkul: id_matkul,
           id_semester: id_semester,
@@ -1482,47 +1595,73 @@ module.exports = {
   },
 
   async putKelasbulk(req, res, next) {
+    let picPatharr = [];
     try {
       if (!req.file) {
         throw createError.BadRequest('File harus berupa excel/.xlsx!');
       }
-      let updateVal = [];
+      let updateVal = [], imgArray = [];
       const excelFile = pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Kelas_updater');
+      if(ws.getImages().length){
+        for (const image of ws.getImages()) {            
+          const img = workbook.model.media.find(m => m.index === image.imageId);
+          const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
+          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-banner');
+          const thumbPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-thumbnail');
+          const scaleBy2 = await sharp(img.buffer).metadata()
+          .then(({ width, height }) => sharp(img.buffer)
+            .resize(Math.round(width * 2), Math.round(height * 2))
+            .sharpen()
+            .toFile(picPath)
+          );
+          if(scaleBy2 instanceof Error) {
+            console.error(scaleBy2);
+            throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
+          }
+          fs.appendFileSync(thumbPath, img.buffer);
+          imgArray.push(`${row}.${col}.${img.name}.${img.extension}`);
+          picPatharr.push(picPath);
+        }
+      }
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
-          let row = ws.getRow(rowNum).values
-          row[4] = row[4] ?? null;
-          row[7] = row[4] ?? null;
+          let row = ws.getRow(rowNum).values;
+          let img = imgArray[rowNum-1];
+          row[5] = row[5] ?? null;
+          row[8] = row[8] ?? null;
           let getMk = await Matakuliah.findOne({
             attributes:['id_matkul','nama_matkul'],
-            where: {nama_matkul: row[3]}
+            where: {nama_matkul: row[4]}
           });                  
           let getSemester = await Ref_semester.findOne({
             attributes:['id_semester','semester'],
-            where: {semester: row[4]}
+            where: {semester: row[5]}
           });
-          if(!getMk) throw createError.NotFound(`matakuliah untuk data ${row[3]} tidak ditemukan.`);
-          if(!getSemester) throw createError.NotFound(`semester untuk data ${row[4]} tidak ditemukan.`);     
-          updateVal.push({
+          if(!getMk) throw createError.NotFound(`matakuliah untuk data ${row[4]} tidak ditemukan.`);
+          if(!getSemester) throw createError.NotFound(`semester untuk data ${row[5]} tidak ditemukan.`); 
+          const data = {
             id_kelas: row[1],
-            kode_seksi: row[2],
+            illustrasi_kelas: img,
+            kode_seksi: row[3],
             id_matkul: getMk.id_matkul,
             id_semester: getSemester.id_semester,
-            hari: row[5],
-            jam: row[6],
-            deskripsi: row[7],
+            hari: row[6],
+            jam: row[7],
+            deskripsi: row[8],
             updated_at: fn('NOW')
-          });
-          if(row[8]||row[9]||row[10]) {
+          }
+          if(!img) delete data.illustrasi_kelas;
+          updateVal.push(data);
+          if(row[9]||row[10]||row[11]) {
             const kelas = await Kelas.findOne({where: {id_kelas: row[1]}});
-            for(let i; i < 3; i++){
-              if(row[8+i]) {
-                let idDosen = await dosen(Dosen, row[8+i]);
+            for(let i = 0; i < 3; i++){
+              if(row[9+i]) {
+                let idDosen = await dosen(Dosen, row[9+i]);
                 kelas.setDosens(idDosen.id_dosen);
-              }
+              } continue;
             }
           }           
         }
@@ -1539,6 +1678,11 @@ module.exports = {
     } catch (error) {
       if(req.file) {
         await unlinkAsync(req.file.path);
+        if(picPatharr.length){
+          for(let i of picPatharr){
+            await unlinkAsync(i);
+          }
+        }
       }
       next(error);
     }
@@ -1590,6 +1734,7 @@ module.exports = {
       const vals = ujian.results.map((i) => {
         return {
           id_ujian: i.id_ujian,
+          thumbnail_ujian: i.illustrasi_ujian,
           jenis_ujian: i.RefJenis.jenis_ujian,
           judul_ujian: i.judul_ujian,
           tanggal_mulai: i.tanggal_mulai,
@@ -1640,12 +1785,14 @@ module.exports = {
       const vals = ujian.results.map((i) => {
         return {
           id_ujian: i.id_ujian,
+          thumbnail_ujian: i.illustrasi_ujian,
           jenis_ujian: i.RefJenis.jenis_ujian,
           judul_ujian: i.judul_ujian,
           tanggal_mulai: i.tanggal_mulai,
           waktu_mulai: i.waktu_mulai,
           status_ujian: i.status_ujian,
-          aktif: i.aktif
+          aktif: i.aktif,
+          paket_soal: i.PaketSoals
         }
       });
       if (vals.length === 0) {vals.push('No Record...')}
@@ -1729,6 +1876,7 @@ module.exports = {
       const vals = ujian.results.map((i) => {
         return {
           id_ujian: i.id_ujian,
+          thumbnail_ujian: i.illustrasi_ujian,
           jenis_ujian: i.RefJenis.jenis_ujian,
           judul_ujian: i.judul_ujian,
           tanggal_mulai: i.tanggal_mulai,
@@ -1772,6 +1920,7 @@ module.exports = {
       const vals = ujian.results.map((i) => {
         return {
           id_ujian: i.id_ujian,
+          thumbnail_ujian: i.illustrasi_ujian,
           jenis_ujian: i.RefJenis.jenis_ujian,
           judul_ujian: i.judul_ujian,
           tanggal_mulai: i.tanggal_mulai,
@@ -1809,6 +1958,7 @@ module.exports = {
       if(!ujian) throw createError.NotFound('data ujian tidak ditemukan.');      
       const data = {
         id_ujian: ujian.id_ujian,
+        banner_ujian: ujian.illustrasi_ujian,
         jenis_ujian: ujian.RefJenis.jenis_ujian,
         judul_ujian: ujian.judul_ujian,
         tanggal_mulai: ujian.tanggal_mulai,
@@ -2479,6 +2629,52 @@ module.exports = {
       res.status(200).json({
         success: true,
         msg: 'data notifikasi berhasil dihapus'
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async setIllustrasi(req, res, next) {
+    try {      
+      const nama_illustrasi = req.file.filename;
+      await Ref_illustrasi.create({
+        nama_illustrasi: nama_illustrasi
+      });
+      const img = await sharp(fs.readFileSync(pathAll(nama_illustrasi, 'img-banner')))
+      .resize(150, 100)
+      .toFile(pathAll(nama_illustrasi, 'img-thumbnail'))
+      if(img instanceof Error) {
+        console.error(img);
+        throw createError.internal('gagal mengupload gambar');
+      }
+      CacheControl.postNewIllustrasi();
+      res.status(200).json({
+        success: true,
+        msg: 'banner dan thumbnail berhasil ditambahkan'
+      });
+    } catch (error) {
+      if(req.file) {
+        await unlinkAsync(req.file.path);
+      }
+      next(error);
+    }
+  },
+
+  async deleteIllustrasi(req, res, next) {
+    try {
+      const idIllustrasi = req.params.id_illustrasi;
+      const getIllustrasi = await Ref_illustrasi.findByPk(idIllustrasi);
+      if (!getIllustrasi) { throw createError.NotFound('data banner tidak ditemukan.')}
+      await Ref_illustrasi.destroy({
+        where: {id_illustrasi: idIllustrasi}
+      });
+      await unlinkAsync(pathAll(getIllustrasi.nama_illustrasi, 'img-banner'));
+      await unlinkAsync(pathAll(getIllustrasi.nama_illustrasi, 'img-thumbnail'));
+      CacheControl.deleteIllustrasi();
+      res.status(200).json({
+        success: true,
+        msg: 'banner dan thumbnail berhasil dihapus'
       });
     } catch (error) {
       next(error);

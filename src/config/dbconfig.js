@@ -25,6 +25,9 @@ module.exports = {
         refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
         apikeySecret: process.env.APIKEY_SECRET,
         defaultPass: process.env.DEFAULT_PASS,
+        defaultProfilePic: process.env.DEFAULT_PROFILE_PIC,
+        defaultBannerPic: process.env.DEFAULT_BANNER_PIC,
+        defaultGlobalPic: process.env.DEFAULT_GLOBAL_PIC,
         linkubahpw: process.env.LINK_UBAH_PW,
         tokenHistoryexpiry: process.env.TOKEN_HISTORY_EXPIRY,
         smtp: {

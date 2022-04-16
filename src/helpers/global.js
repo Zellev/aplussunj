@@ -4,7 +4,8 @@ const Passport = require('passport');
 const jwt = require('jsonwebtoken');
 const config = require('../config/dbconfig');
 const bcrypt = require('bcrypt');
-const { Paket_soal } = require('../models');
+const path = require('path');
+const { Paket_soal, Ref_illustrasi } = require('../models');
 
 const payload = (user) => {  
   return {
@@ -274,7 +275,40 @@ module.exports = {
       durasi = `${diffMins} menit`
     }
     return durasi;
-  }, 
+  },
+
+  /**
+   * @param {String} filename
+   * @param {String} filetype available filetype: 'xlsx', 'pdf', 'img-banner', 'img-matkul', 
+   * 'img-soal', 'img-thumbnail', defaults to '/public'
+   * @returns {String} returns combined filename and path.
+  */
+  pathAll(filename, filetype) {
+    let combined;
+    switch(filetype){
+      case 'xlsx':
+        combined = path.join(__dirname,'../../public/fileuploads/xlsxInput/' + filename);
+      break;
+      case 'pdf':
+        combined = path.join(__dirname,'../../public/pdftemplate/' + filename);
+      break;
+      case 'img-soal': 
+        combined = path.join(__dirname,'../../public/fileuploads/picInput/gambar_soal/' + filename);
+      break;
+      case 'img-banner':
+        combined = path.join(__dirname,'../../public/default-images/banner/' + filename);
+      break;
+      case 'img-matkul':
+        combined = path.join(__dirname,'../../public/default-images/thumbnail/' + filename);
+      break;
+      case 'img-thumbnail':
+        combined = path.join(__dirname,'../../public/default-images/thumbnail/' + filename);
+      break;
+      default:
+        combined = path.join(__dirname,'../../public/' + filename);
+    }
+    return combined;
+  },
 
   async hashed() {
     return new Promise((resolve, reject) => {
@@ -286,6 +320,16 @@ module.exports = {
         }
       })
     })
-  }// hash default password, ada di .env
+  },// hash default password, ada di .env
+
+  async randomPic() {
+    const count = await Ref_illustrasi.count();
+    const random = Math.floor(Math.random() * count)+1;
+    const getIllustrasi = await Ref_illustrasi.findOne({
+      where: { id_illuatrasi : random },
+      raw: true
+    });
+    return getIllustrasi.nama_illustrasi;
+  }
 
 }

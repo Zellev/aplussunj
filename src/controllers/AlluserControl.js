@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const { User, Dosen, Matakuliah, Kelas, Soal_essay, 
         Jawaban_mahasiswa, Pengumuman, Ujian, Paket_soal, Rel_paketsoal_soal, 
         Rel_mahasiswa_paketsoal, Notifikasi, Ref_jenis_ujian, Ref_kel_matkul, 
-        Ref_peminatan, Ref_semester } = require('../models');
+        Ref_peminatan, Ref_semester, Ref_illustrasi } = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
 const { paginator } = require('../helpers/global');
 const { kelasValidator } = require('../validator/SearchValidator');
@@ -110,6 +110,7 @@ module.exports = {
       const kelas = sms.results.map((i) => {
         return {
           id_kelas: i.id_kelas,
+          thumbnail_kelas: i.illustrasi_kelas,
           kode_seksi: i.kode_seksi,
           matkul: i.Matkul.nama_matkul,
           semester: i.RefSem.semester,
@@ -201,6 +202,7 @@ module.exports = {
             })            
             vals.push({
               id_kelas: i.id_kelas,
+              thumbnail_kelas: i.illustrasi_kelas,
               kode_seksi: i.kode_seksi,
               nama_matkul: matkul.nama_matkul,
               semester: sems.semester,
@@ -249,6 +251,7 @@ module.exports = {
       const result = kelas.results.map((i) => {
         return {
           id_kelas: i.id_kelas,
+          thumbnail_kelas: i.illustrasi_kelas,
           kode_seksi: i.kode_seksi,
           nama_matkul: i.Matkul.nama_matkul,
           semester: i.RefSem.semester,
@@ -293,6 +296,7 @@ module.exports = {
         if (!val) { throw createError.NotFound('data kelas tidak ditemukan.')}
         const kelas = {
           id_kelas: val.id_kelas,
+          banner_kelas: val.illustrasi_kelas,
           kode_seksi: val.kode_seksi,
           nama_matkul: val.Matkul.nama_matkul,
           semester: val.semester,
@@ -372,6 +376,18 @@ module.exports = {
       }
       CacheControl.getNotifikasi(req);
       res.status(200).json(notif);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getIllustrasi(req, res, next) {
+    try {
+      const illustrasi = await Ref_illustrasi.findAll({
+        order: [['id_illustrasi', 'ASC']]
+      });
+      CacheControl.getIllustrasi(req);
+      res.status(200).json(illustrasi);
     } catch (error) {
       next(error);
     }

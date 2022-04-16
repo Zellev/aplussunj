@@ -9,6 +9,8 @@ const ErrorHandler = require('./errorHandlers/ErrorHandler');
 const AuthControl = require('./controllers/AuthControl');
 const { cacheWare, apicache } = require('./middlewares/apicache');
 const { engine } = require('express-handlebars');
+const { rateLimiter } = require('./middlewares/ratelimiter');
+const { rateSlowdown } = require('./middlewares/rateslowdown');
 const compression = require('compression');
 const https = require('https');
 const path = require('path');
@@ -32,9 +34,10 @@ app.engine('.hbs', engine({
 app.set('view engine', '.hbs');
 app.set('views', path.join(__dirname, '../public/pdftemplate'));
 app.use(express.static(path.join(__dirname, '../public')));
-app.use('/resource/images', express.static(path.resolve(__dirname, '../public/fileuploads/picInput')));
-app.use('/resource/audios', express.static(path.resolve(__dirname, '../public/fileuploads/audioInput')));
-app.use('/resource/videos', express.static(path.resolve(__dirname, '../public/fileuploads/videoInput')));
+app.use('/resource/default-image', express.static(path.resolve(__dirname, '../public/default-images')));
+app.use('/resource/image-upload', express.static(path.resolve(__dirname, '../public/fileuploads/picInput')));
+app.use('/resource/audio-upload', express.static(path.resolve(__dirname, '../public/fileuploads/audioInput')));
+app.use('/resource/video-upload', express.static(path.resolve(__dirname, '../public/fileuploads/videoInput')));
 app.use('/resource/pdf-template', express.static(path.resolve(__dirname, '../public/fileuploads/pdftempdlate')));
 app.use('/resource/views', express.static(path.resolve(__dirname, '../public/fileuploads/views')));
 app.use(morgan('combined'));/* dev */
@@ -45,6 +48,8 @@ app.use(cors({}))//origin: 'http://host', client origins
 app.use(compression());
 app.use(AuthControl.jwtauthSistem);
 app.use(cacheWare);
+app.use(rateSlowdown);
+app.use(rateLimiter);
 
 require('./routes')(app, apicache);
 app.use(ErrorHandler);

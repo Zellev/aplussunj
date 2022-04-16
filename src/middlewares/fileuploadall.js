@@ -2,6 +2,8 @@ const Multer = require('multer');
 const path = require('path');
 const { todaysdate } = require('../helpers/global');
 const PathPic = path.join(__dirname, '../../public/fileuploads/picInput');
+const PathBanner = path.join(__dirname, '../../public/default-images/banner');
+const PathIllustrasiMatkul = path.join(__dirname, '../../public/default-images/illustrasi_matkul');
 const PathXl = path.join(__dirname, '../../public/fileuploads/xlsxInput');
 const PathAud = path.join(__dirname, '../../public/fileuploads/audioInput');
 const PathVid = path.join(__dirname, '../../public/fileuploads/videoInput');
@@ -13,6 +15,8 @@ const createError = require('../errorHandlers/ApiErrors');
         switch(file.fieldname){
             //case 1 = gambar
             case 'foto_profil':
+            case 'gambar_banner':
+            case 'gambar_matkul':
             case 'gambar_soal_1':
             case 'gambar_soal_2':
             case 'gambar_soal_3':
@@ -124,7 +128,7 @@ const createError = require('../errorHandlers/ApiErrors');
     let filestorage = Multer.diskStorage({
         destination: (req, file, cb) => {
             switch(file.fieldname){
-                case 'foto_profil':
+                case 'foto_profil':             
                 case 'gambar_soal_1':
                 case 'gambar_soal_2':
                 case 'gambar_soal_3':
@@ -138,7 +142,7 @@ const createError = require('../errorHandlers/ApiErrors');
                 break;
                 case 'audio_soal':
                 case 'audio_jawaban':
-                case 'audio_soal[]':                    
+                case 'audio_soal[]':
                     cb(null, PathAud);
                 break;
                 case 'video_soal':
@@ -146,13 +150,20 @@ const createError = require('../errorHandlers/ApiErrors');
                 case 'video_soal[]':
                     cb(null, PathVid);
                 break;
+                case 'gambar_banner':
+                    cb(null, PathBanner);
+                break;
+                case 'gambar_matkul':
+                    cb(null, PathIllustrasiMatkul);
+                break;
                 default:
                     cb(null, PathDefault);
             }
         },
         filename: (req, file, cb) => {
             let filename;
-            if(file.fieldname === 'audio_soal[]'||file.fieldname === 'video_soal[]'){
+            if(file.fieldname === 'audio_soal[]'|| file.fieldname === 'video_soal[]'||
+            file.fieldname === 'gambar_banner' || file.fieldname === 'gambar_matkul'){
                 filename = file.originalname;
                 cb(null, `${filename}`);
             } else {

@@ -6,8 +6,9 @@ const getAllClient = (req) => { return req.apicacheGroup = 'client-all'};
 const getCaptcha = (req) => { return req.apicacheGroup = 'captcha'};
 //post
 const postClient = () => {return apicache.clear(['client-all'])};
+const postNewAdmin = () => {return apicache.clear(['user-all', 'user', 'dashboard-admin'])};
 //put
-const putClient = () => {return apicache.clear('client-all')};
+const putClient = () => {return apicache.clear(['client-all'])};
 //delete
 const deleteClient = () => {return apicache.clear(['client-all'])};
 
@@ -21,6 +22,7 @@ const getProfilDosen = (req) => { return req.apicacheGroup = 'profil-dosen'};
 const getProfilMhs = (req) => { return req.apicacheGroup = 'profil-mhs'};
 const getPengumuman = (req) => { return req.apicacheGroup = 'pengumuman'};
 const getNotifikasi = (req) => { return req.apicacheGroup = 'notifikasi'};
+const getIllustrasi = (req) => { return req.apicacheGroup = 'illustrasi'};
 const getJenisUjian = (req) => { return req.apicacheGroup = 'jenis-ujian'};
 const getKelompokMatakuliah = (req) => { return req.apicacheGroup = 'kelompok-matakuliah'};
 const getPeminatan = (req) => { return req.apicacheGroup = 'peminatan'};
@@ -29,8 +31,7 @@ const getSemester = (req) => { return req.apicacheGroup = 'semester'};
 const postProfilePic = () => {return apicache.clear(['profil-dosen', 'myprofile-dosen', 
 'profil-mhs', 'myprofile-mhs'])};
 const postNotifikasi = () => {return apicache.clear(['notifikasi'])};
-const postNilaiAuto = () => {return apicache.clear(['nilai-total-mhs', 'nilai-akhir'])}; // getter nilai ~
-const postNewAdmin = () => {return apicache.clear(['user-all', 'user', 'dashboard-admin'])};
+const postNilaiAuto = () => {return apicache.clear(['nilai-total-mhs', 'nilai-akhir'])};
 
 //AdminController
 //get
@@ -65,6 +66,7 @@ const postNewPengumuman = () => {return apicache.clear(['pengumuman-all', 'pengu
 const postNewCaptcha = () => {return apicache.clear(['captcha-all', 'captcha'])};
 const postNewSemester = () => {return apicache.clear(['semester-all', 'semester'])};
 const postNewNotifikasi = () => {return apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi'])};
+const postNewIllustrasi = () => {return apicache.clear(['illustrasi'])};
 //put
 const putUser = () => {return apicache.clear(['user-all', 'user', 'profil-dosen', 'myprofile-dosen', 'profil-mhs', 
 'myprofile-mhs', 'dosen-all', 'mhs-all'])};
@@ -111,6 +113,7 @@ const deletePengumuman = () => {return apicache.clear(['pengumuman-all', 'pengum
 const deleteCaptcha = () => {return apicache.clear(['captcha-all', 'captcha'])};
 const deleteSemester = () => {return apicache.clear(['semester-all', 'semester'])};
 const deleteNotifikasi = () => {return apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi'])};
+const deleteIllustrasi = () => {return apicache.clear(['illustrasi'])};
 
 //DosenController
 //get
@@ -197,15 +200,15 @@ module.exports = {
     /* AdminController */
     getDashboardAdmin, getAllUser, getUser, getmyProfileAdmin, getAllDosen, getAllMhs, getAllMatkul,
     getMatkul, getMhsKelas, getDosenKelas, getUjianKelas, getAllUjian, getUjian, getLupapw, getAllPengumuman,
-    getAllCaptcha, getAllSemester, getAllNotifikasi, getNotifikasiAdm, 
-    postNewUser, postNewMatkul, postNewKelas, postNewMhsKelas, postNewDosenKelas, 
+    getAllCaptcha, getAllSemester, getAllNotifikasi, getNotifikasiAdm, getIllustrasi,
+    postNewUser, postNewMatkul, postNewKelas, postNewMhsKelas, postNewDosenKelas, postNewIllustrasi,
     postNewUjianKelas, postNewMhsPkSoal, postNewPengumuman, postNewCaptcha, postNewSemester, postNewNotifikasi,
     putUser, putmyProfileAdmin, putDosen, putMhs, putMatkul, putKelas, putMhsKelas, putDosenKelas,
     putUjianKelas, putUjian, putMhsPkSoal, putPengumuman, putCaptcha, putSemester, putNotifikasi,
     patchStatusUjian, patchKeaktifanUjian, resetPw,
     deleteUser, deleteDosen, deleteMhs, deleteMatkul, deleteKelas, deleteMhsKelas, deleteDosenKelas,
     deleteUjianKelas, deleteUjian, deletePaketSoal, deleteMhsPkSoal, deleteLupapw, deletePengumuman,
-    deleteCaptcha, deleteSemester, deleteNotifikasi,
+    deleteCaptcha, deleteSemester, deleteNotifikasi, deleteIllustrasi,
     /* DosenController */
     getmyProfileDosen, getDashboardDosen, getStatus, getAllMatkulDosen, getMatkulDosen, getAllKelasDosen,
     getPaketSoal, getPaketSoalMhs, getNilaiTotalMhs, getSoalPenilaian, getAllJawabanSoalAnon, getAllJawabanSoal,
