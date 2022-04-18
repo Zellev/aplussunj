@@ -13,7 +13,9 @@ module.exports = (sequelize, DataTypes) => {
         }      
     }, {
         freezeTableName: true,
-        timestamps: false 
+        timestamps: false,
+        paranoid: true,
+        deletedAt: 'deleted_at'
     });
 
     return Ref_illustrasi;

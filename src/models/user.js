@@ -47,6 +47,8 @@ module.exports = (sequelize, DataTypes) => {
         }
     }, {       
         timestamps: false,
+        paranoid: true,
+        deletedAt: 'deleted_at',
         indexes:[
             {
                 name: 'archived_by_createdAt',

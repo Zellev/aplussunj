@@ -36,7 +36,9 @@ module.exports = (sequelize, DataTypes) => {
         }
     }, {
         freezeTableName: true,
-        timestamps: false
+        timestamps: false,
+        paranoid: true,
+        deletedAt: 'deleted_at'
     });
 
     Matakuliah.associate = db => {        

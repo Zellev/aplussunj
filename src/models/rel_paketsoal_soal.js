@@ -41,7 +41,7 @@ module.exports = (sequelize, DataTypes) => {
         },
     }, {
         freezeTableName: true,
-        timestamps: false
+        timestamps: false,
     });
 
     Rel_paketsoal_soal.associate = db => {

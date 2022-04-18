@@ -115,5 +115,10 @@ let router = express.Router({mergeParams:true});
     //Admin illustrasi operation
     router.post('/illustrasi', uploadFile.single('gambar_banner'), AdminControl.setIllustrasi);
     router.delete('/illustrasi/:id_illustrasi', AdminControl.deleteIllustrasi);
+    //Admin perma Delete operation
+    router.get('/nama-tabel', AdminControl.getAllModelName);
+    router.get('/soft-deleted/:nama_tabel', AdminControl.getAllSoftDeleted); // get all soft deleted records of tabel
+    router.put('/soft-deleted/:nama_tabel', AdminControl.putSoftDeleted); // restore soft deleted records of tabel
+    router.post('/permanent-delete/:nama_tabel', AdminControl.permanentDelete); // perma delete soft deleted records of tabel
 
     module.exports = router;

@@ -2,6 +2,7 @@ const { User, Dosen, Mahasiswa, Captcha, Lupa_pw, Matakuliah, Kelas,
         Paket_soal, Token_history, Ujian, Notifikasi, Pengumuman, 
         Ref_kel_matkul, Ref_peminatan, Ref_semester, Ref_illustrasi, 
         Ref_role, Ref_jenis_ujian, Rel_mahasiswa_paketsoal } = require('../models');
+const models = require('../models');
 const config = require('../config/dbconfig');
 const path = require('path');
 const ExcelJS = require('exceljs');
@@ -12,8 +13,8 @@ const fs = require('fs');
 const createError = require('../errorHandlers/ApiErrors');
 const { promisify } = require('util');
 const unlinkAsync = promisify(fs.unlink);
-const { paginator, shuffleArray, todaysdate, 
-        dateFull, hashed, randomPic, pathAll } = require('../helpers/global');
+const { paginator, shuffleArray, todaysdate, dateFull, 
+        hashed, randomPic, pathAll, getModelPK } = require('../helpers/global');
 const { userValidator, dosenValidator, mhsValidator, 
         ujianValidator, matkulValidator } = require('../validator/SearchValidator');
 const { Op, fn } = require('sequelize');
@@ -2675,6 +2676,78 @@ module.exports = {
       res.status(200).json({
         success: true,
         msg: 'banner dan thumbnail berhasil dihapus'
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getAllModelName(req, res, next) {
+    try {
+      let blacklist = ['sequelize', 'Sequelize', 'Token_history', 
+      'Client', 'Ref_client', 'Lupa_pw']
+      if(!req.user.id_role){
+        blacklist = ['sequelize', 'Sequelize', 'Token_history', 'Lupa_pw']
+      }
+      const data = Object.keys(models)
+      .filter((key) => {
+        if(!blacklist.includes(key)){
+          if(key.toLowerCase().indexOf('rel')){
+            return key;
+         }
+        }
+      });
+      CacheControl.getAllModelName();
+      res.status(200).json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getAllSoftDeleted(req, res, next) {
+    try {
+      const modelName = req.params.nama_tabel;
+      const data = await models[modelName].findAll({ 
+        where: { deleted_at: { [Op.ne]: null } } 
+      });
+      CacheControl.getSoftDeleted();
+      res.status(200).json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async putSoftDeleted(req, res, next) {
+    try {
+      const modelName = req.params.nama_tabel;
+      const arrId = req.body.id;
+      const prop = await getModelPK(modelName);
+      if(prop instanceof createError) throw prop;
+      await modelName.restore({ where: {[prop]: {[Op.in]: arrId}} });
+      CacheControl.putSoftDeleted();
+      res.status(200).json({
+        success: true,
+        msg: `sebanyak ${arrId.length} data berhasil dipulihkan pada tabel ${modelName}`
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async permanentDelete(req, res, next) {
+    try {
+      const modelName = req.params.nama_tabel;
+      const arrId = req.body.id;
+      const prop = await getModelPK(modelName);
+      if(prop instanceof createError) throw prop;
+      await modelName.destroy({
+        where: {[prop]: {[Op.in]: arrId}},
+        force: true
+      });
+      CacheControl.permaDelete();
+      res.status(200).json({
+        success: true,
+        msg: `sebanyak ${arrId.length} data berhasil dihapus permament pada tabel ${modelName}`
       });
     } catch (error) {
       next(error);

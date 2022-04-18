@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const config = require('../config/dbconfig');
 const bcrypt = require('bcrypt');
 const path = require('path');
-const { Paket_soal, Ref_illustrasi } = require('../models');
+const models = require('../models');
 
 const payload = (user) => {  
   return {
@@ -197,7 +197,7 @@ module.exports = {
       for ( var i = 0; i < length; i++ ) {
         kdPaket += characters.charAt(Math.floor(Math.random() * charactersLength));
       }  
-      paketExist = await Paket_soal.findOne({  //paketExist = null
+      paketExist = await models.Paket_soal.findOne({  //paketExist = null
         attributes:['kode_paket'],
         where: {kode_paket: kdPaket}
       });
@@ -323,13 +323,23 @@ module.exports = {
   },// hash default password, ada di .env
 
   async randomPic() {
-    const count = await Ref_illustrasi.count();
+    const count = await models.Ref_illustrasi.count();
     const random = Math.floor(Math.random() * count)+1;
-    const getIllustrasi = await Ref_illustrasi.findOne({
+    const getIllustrasi = await models.Ref_illustrasi.findOne({
       where: { id_illuatrasi : random },
       raw: true
     });
     return getIllustrasi.nama_illustrasi;
-  }
+  },
 
+  /**
+   * @param {String} modelName 
+   * @returns string primary key of the model
+   */
+  async getModelPK(modelName){
+    const model = await models[modelName].findOne({raw: true});
+    if(typeof model !== 'object') return createError.BadRequest('Model not found');
+    return Object.keys(model)[0];
+  }
+  
 }

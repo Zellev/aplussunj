@@ -3,8 +3,9 @@ const DosenRoute = require('./dosenroute')//rute dosen
 const MhsRoute = require('./mhsroute')//rute mahasiswa
 
 const AuthControl = require('../controllers/AuthControl');// controller all role not loggedin
+const AdminControl = require('../controllers/AdminControl');// controller admin, buat superadmin
 const DosenControl = require('../controllers/DosenControl');// controller dosen, buat get profil
-const MhsControl = require('../controllers/MhsControl');// controller dosen, buat get profil
+const MhsControl = require('../controllers/MhsControl');// controller mahasiswa, buat get profil
 const AlluserControl = require('../controllers/AlluserControl');// controller all role logged in
 
 const uploadPic = require('../middlewares/fileuploadall');
@@ -75,7 +76,11 @@ module.exports = (app, apicache) => { // console.log(Object.keys(PutInstanceHere
     app.patch('/v1/client/:id_client/api-key', AuthControl.patchClientKey);
     app.delete('/v1/client/:id_client', AuthControl.deleteClient);
     app.post('/v1/admin', Validator.tambahAdminCheck, Validator.adminExist, AuthControl.setAdmin);
-    
+    app.get('/nama-tabel', AdminControl.getAllModelName);
+    app.get('/soft-deleted/:nama_tabel', AdminControl.getAllSoftDeleted); // get all soft deleted records of tabel
+    app.put('/soft-deleted/:nama_tabel', AdminControl.putSoftDeleted); // restore soft deleted records of tabel
+    app.post('/permanent-delete/:nama_tabel', AdminControl.permanentDelete); // perma delete soft deleted records of tabel
+
     /*--Endpoint Test--*/
     // app.post('/test/uploadfile', uploadFiles3, AlluserControl.uploadFile);
    
