@@ -38,7 +38,7 @@ Jika ingin menambahkan data dummy ganti command pada langkah no 6 menjadi `npx s
 
 ## Dokumentasi Pengujian Endpoint:
 
-URL_PLACEHOLDER
+https://documenter.getpostman.com/view/15028732/UzQxMPLY
 
 ## Versi Heroku:
 
