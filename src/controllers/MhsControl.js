@@ -1,8 +1,7 @@
-const { User, Mahasiswa, Dosen, Kelas, Matakuliah, Ujian, 
-        Paket_soal, Soal_essay, Jawaban_mahasiswa, Rel_paketsoal_soal, 
-        Rel_mahasiswa_paketsoal, Ref_jenis_ujian } = require('../models');
-const { paginator, todaysdate, dateFull, timeDiff, pathAll } = require('../helpers/global');
-const { jawabanValidator } = require('../validator/SearchValidator');
+'use strict';
+const models = require('../models');
+const helpers = require('../helpers/global');
+const searchsValid = require('../validator/SearchValidator');
 const { Op, fn, col } = require('sequelize');
 const jp = require('jsonpath');
 const createError = require('../errorHandlers/ApiErrors');
@@ -10,16 +9,17 @@ const CacheControl = require('../controllers/CacheControl');
 const pdf = require('html-pdf');
 const ExcelJS = require('exceljs');
 const path = require('path');
+const config = require('../config/dbconfig')
 
 const getJwbn = async (options) => {
   let obj;
   if('id_jawaban' in options){
     obj = {
-      model: Jawaban_mahasiswa, as: 'Jawabans', attributes: ['id_jawaban']
+      model: models.Jawaban_mahasiswa, as: 'Jawabans', attributes: ['id_jawaban']
     }
   } else {
     obj = {
-      model: Paket_soal, as: 'PaketSoals', attributes: ['id_paket', 'id_ujian'],
+      model: models.Paket_soal, as: 'PaketSoals', attributes: ['id_paket', 'id_ujian'],
       through: { attributes: [] }
     }
   }
@@ -32,7 +32,7 @@ const getJwbn = async (options) => {
     return mhsJson.Jawabans.map(i => i.id_jawaban).includes(parseInt(options.id_jawaban));
   } else {
     if('id_paket' in options){
-      return mhsJson.PaketSoals.map(i => i.id_paket).includes(options.id_paket);
+      return mhsJson.PaketSoals.map(i => i.id_paket).includes(parseInt(options.id_paket));
     } else if('id_ujian' in options){
       return mhsJson.PaketSoals.map(i => i.id_ujian).includes(parseInt(options.id_ujian));
     }    
@@ -43,29 +43,30 @@ const getPkSoalHistory = async (user) => {
   const mhs = await user.getMahasiswa({
     attributes: ['id_mhs', 'id_user', 'NIM', 'nama_lengkap'],
     include: [
-      {model: Paket_soal, as: 'PaketSoals',
+      {model: models.Paket_soal, as: 'PaketSoals',
         through: {attributes: ['nilai_total'], where: {nilai_total: {[Op.ne]: null}}},
         include: [
-          {model: Ujian, as: 'Ujian',
-            attributes: [ 'id_ujian', 'kode_jenis_ujian', 'judul_ujian', 'tanggal_mulai', 'durasi_ujian'],
-            include: {model: Ref_jenis_ujian, as: 'RefJenis'}
+          {model: models.Ujian, as: 'Ujian',
+            attributes: [ 'id_ujian', 'id_jenis_ujian', 'judul_ujian', 'tanggal_mulai', 'durasi_ujian'],
+            include: {model: models.Ref_jenis_ujian, as: 'RefJenis'}
           },
-          {model: Soal_essay, as: 'Soals', 
+          {model: models.Soal_essay, as: 'Soals', 
             attributes: ['id_soal'], through: {attributes: []}
           }
         ]
       }
     ],
     order: [
-      [ { model: Paket_soal, as: 'PaketSoals' }, 
-        { model: Ujian, as: 'Ujian' }, 'created_at','ASC'] 
+      [ { model: models.Paket_soal, as: 'PaketSoals' }, 
+        { model: models.Ujian, as: 'Ujian' }, 'created_at','ASC'] 
     ]
   });
   if(!mhs) return null;
+  let no = 1;
   const mhsJson = mhs.toJSON();
   const data = mhsJson.PaketSoals.map((i) => {
     return {
-      no_paket: i.id_paket,
+      no_paket: no++,
       kode_paket: i.kode_paket,
       nilai_akhir: i.Rel_mahasiswa_paketsoal.nilai_total,
       jenis_ujian: i.Ujian.RefJenis.jenis_ujian,
@@ -95,22 +96,27 @@ module.exports = {
       const mhs = await user.getMahasiswa({
         attributes: ['id_mhs'],        
         include: [
-          {model: Kelas, as: 'Kelases', through: {attributes:[]}, 
-            include: {model: Dosen, as: 'Dosens', attributes: {
+          {
+            model: models.Kelas, as: 'Kelases', through: {attributes:[]}, 
+            include: {model: models.Dosen, as: 'Dosens', attributes: {
               exclude:[ 'id_user','alamat','nomor_telp','created_at','updated_at']
-            }, through: {attributes:[]}}},
-          {model: Paket_soal, as: 'PaketSoals', through: {attributes:[]},
-          include: {model: Ujian, as: 'Ujian', where: {[Op.and]: [
-            {status_ujian: {[Op.or]: ['akan dimulai', 'sedang berlangsung']}}, 
-            {aktif: 1}
-          ]}, 
-          required: false, include: {model: Ref_jenis_ujian, as: 'RefJenis'}}
+            }, through: {attributes:[]}}
+          },
+          {
+            model: models.Paket_soal, as: 'PaketSoals', through: {attributes:[]},
+            include: {
+                model: models.Ujian, as: 'Ujian', where: {[Op.and]: [
+                {status_ujian: {[Op.or]: ['akan dimulai', 'sedang berlangsung']}}, 
+                {aktif: true}
+              ]},
+              include: {model: models.Ref_jenis_ujian, as: 'RefJenis'}
+            }
           }
         ]
       });
       const kelasJson = mhs.toJSON();
       const kelasMhs = await Promise.all(kelasJson.Kelases.map(async (i) => {        
-        const matkul = await Matakuliah.findOne({
+        const matkul = await models.Matakuliah.findOne({
           attributes:['id_matkul','nama_matkul'],
           where: {id_matkul: i.id_matkul}
         });
@@ -141,7 +147,7 @@ module.exports = {
       CacheControl.getDashboardMhs(req);
       res.status(200).json({
         kelas: kelasMhs,
-        ujian_akan_dimulai: ujian
+        ujian: ujian
       })
     } catch (error) {
       next(error);
@@ -154,20 +160,20 @@ module.exports = {
         attributes:['id_mhs'],
         include: [
           {
-            model: Kelas, as: 'Kelases', attributes: ['id_kelas'],
+            model: models.Kelas, as: 'Kelases', attributes: ['id_kelas'],
             through: {attributes:[]},
             include: {
-              model: Ujian, as: 'Ujians', attributes: ['id_ujian'],
+              model: models.Ujian, as: 'Ujians', attributes: ['id_ujian'],
               through: {attributes:[]},
             }
           },
-          {model: Jawaban_mahasiswa, as: 'Jawabans', attributes: ['id_jawaban']}
+          {model: models.Jawaban_mahasiswa, as: 'Jawabans', attributes: ['id_jawaban']}
         ]
       })
       const totalKelas = mhs.Kelases.length
       const totalJawaban = mhs.Jawabans.length
       const totalUjian = jp.query(mhs.toJSON(), '$.Kelases[*].Ujians').length
-      const totalPkSoal = await Rel_mahasiswa_paketsoal.count({
+      const totalPkSoal = await models.Rel_mahasiswa_paketsoal.count({
         where: {id_mhs: mhs.id_mhs}
       });
       res.status(200).json({
@@ -187,7 +193,7 @@ module.exports = {
       let mhs, mhsUser;
       if(path === '/profil-mahasiswa/:id_mhs'){
         const { id_mhs } = req.params;
-        mhs = await Mahasiswa.findOne({ 
+        mhs = await models.Mahasiswa.findOne({ 
           where: {id_mhs:id_mhs}
         });
         if(!mhs){throw createError.NotFound('user tidak ditemukan.')}
@@ -196,7 +202,7 @@ module.exports = {
         });
         CacheControl.getProfilMhs(req);
       } else {
-        mhs = await Mahasiswa.findOne({
+        mhs = await models.Mahasiswa.findOne({
           where: {id_user: req.user.id}
         });
         mhsUser = await mhs.getUser({
@@ -213,7 +219,7 @@ module.exports = {
     }
   },
 
-  async putProfile(req, res, next){
+  async putProfil(req, res, next){
     try {
       const user = req.user;
         const { username, email, keterangan, nama_lengkap, alamat, no_telp } = req.body;        
@@ -229,16 +235,22 @@ module.exports = {
           nomor_telp: no_telp,
           updated_at: fn('NOW')
         };
-        await User.update(updateVal1, {
+        await models.User.update(updateVal1, {
           where: { id: user.id }
         });
-        await Mahasiswa.update(updateVal2, {
+        await models.Mahasiswa.update(updateVal2, {
           where: { id_user: user.id }
         });
-        CacheControl.putmyProfileMhs();
+        const {password, ...dataUser} = req.user.dataValues; // eslint-disable-line
+        const dataMhs = await req.user.getMahasiswa();
+        CacheControl.putProfilMhs();
       res.status(200).json({
         success: true,
-        msg: `profil anda berhasil diubah`
+        msg: `profil anda berhasil diubah`,
+        data: {
+          dataUser: dataUser,
+          dataMahasiswa: dataMhs
+        }
       });
     } catch (error) {
       next(error);
@@ -252,11 +264,11 @@ module.exports = {
         res.status(200).json({ success: true, msg: 'Belum ada Ujian yang selesai' });
       }
       const options = {format: 'A4'};
-      const tanggal = dateFull();
+      const tanggal = helpers.dateFull();
       const img = 'data:image/png;base64,' + require('fs')
           .readFileSync(path.resolve(__dirname,'../../public/pdftemplate','kop_surat.png'))
           .toString('base64');
-      res.render(pathAll('ujian_mhs.hbs', 'pdf'), {
+      res.render(helpers.pathAll('ujian_mhs.hbs', 'pdf'), {
         kop_surat: img,
         data_mhs: pkSoal.mhs,
         data: pkSoal.pksoal,
@@ -270,7 +282,7 @@ module.exports = {
           const output = ((val) => {
             res.writeHead(200, {
               'Content-Type': 'application/pdf',
-              'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-ujian.pdf"`
+              'Content-Disposition': `attachment;filename="${req.user.id}_${helpers.todaysdate()}-history_ujian.pdf"`
             })
             const download = Buffer.from(val);
             res.end(download);
@@ -316,12 +328,12 @@ module.exports = {
       newWS.getCell('J3').value = pkSoal.mhs.username;
       newWS.getCell('J3').alignment = { horizontal:'left'} ;
       newWS.mergeCells('I4:O4');
-      newWS.getCell('I4').value = 'tertanggal, ' + dateFull();
+      newWS.getCell('I4').value = 'tertanggal, ' + helpers.dateFull();
       newWS.getCell('I4').alignment = { horizontal:'center'} ;
       const output = ((val)=>{
         res.writeHead(200,{       
           'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-ujian.xlsx"`
+          'Content-Disposition': `attachment;filename="${req.user.id}_${helpers.todaysdate()}-history_ujian.xlsx"`
         })
         const download = Buffer.from(val);
         res.end(download);
@@ -338,18 +350,23 @@ module.exports = {
       const mhs = await user.getMahasiswa({
         attributes: ['id_mhs'],
         include: {
-          model: Kelas, as: 'Kelases', required: false,
+          model: models.Kelas, as: 'Kelases',
           through: {attributes:[]},
           include: [
-            {model: Matakuliah, as: 'Matkul', attributes: ['id_matkul','nama_matkul']},
-            {model: Dosen, as: 'Dosens', attributes: {
-              exclude:[ 'id_user','alamat','nomor_telp','created_at','updated_at']
-            }, through: {attributes:[]}},
-            {model: Ujian, as: 'Ujians', attributes: ['id_ujian'], where: {
+            {
+              model: models.Matakuliah, as: 'Matkul', attributes: ['id_matkul','nama_matkul']
+            },
+            {
+              model: models.Dosen, as: 'Dosens', attributes: [ 
+                'id_dosen', 'NIP', 'NIDN', 'NIDK', 'nama_lengkap' 
+              ], through: {attributes:[]}
+            },
+            {
+              model: models.Ujian, as: 'Ujians', attributes: ['id_ujian'], where: {
               [Op.and]: [
                 {status_ujian: {[Op.or]: ['akan dimulai', 'sedang berlangsung']}}, 
                 {aktif: 1}
-              ]}
+              ]}, required: false
             }
           ]
         }
@@ -385,7 +402,11 @@ module.exports = {
       CacheControl.postKelasMhs();
       res.status(200).json({
         success: true,
-        msg: 'kelas berhasil ditambahkan'
+        msg: `sebanyak ${idKelas.length} kelas berhasil diikuti`,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/kelas`
+        }
       });
     } catch (error) {
       next(error);
@@ -401,7 +422,11 @@ module.exports = {
       CacheControl.putKelasMhs();
       res.status(200).json({
         success: true,
-        msg: 'kelas yang diikuti berhasil diubah'
+        msg: 'kelas yang diikuti berhasil diubah',
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/kelas`
+        }
       });
     } catch (error) {
       next(error);
@@ -417,7 +442,7 @@ module.exports = {
       CacheControl.deleteKelasMhs();
       res.status(200).json({
         success: true,
-        msg: 'berhasil menghapus kelas'
+        msg: `berhasil menghapus relasi ${idKelas.length} kelas`
       });
     } catch (error) {
       next(error);
@@ -432,17 +457,23 @@ module.exports = {
       if(id_ujian){
         obj = {id_ujian: id_ujian}
       } else if(id_paket){
-        obj = {id_paket: {[Op.like]:'%' + id_paket + '%'}}
+        obj = {id_paket: id_paket }
       }
       const pkSoal = await req.user.getMahasiswa({
         attributes:['id_mhs'],
-        include: { model: Paket_soal, as: 'PaketSoals', where: obj }
+        include: { model: models.Paket_soal, as: 'PaketSoals', where: obj },
+        raw: true, nest: true
       });
-      if(!pkSoal) throw createError.NotFound('data paket-soal tidak ditemukan.');
+      if(!pkSoal) throw createError.NotFound('data ujian/paket-soal tidak ditemukan.');
       const updateVal = {
         waktu_mulai: waktu_mulai
       }
-      await Rel_mahasiswa_paketsoal.update(updateVal, {
+      await models.Rel_mahasiswa_paketsoal.update(updateVal, {
+        where: {
+          [Op.and]: [{id_mhs: pkSoal.id_mhs}, {id_paket: pkSoal.PaketSoals.id_paket}]
+        }
+      });
+      const data = await models.Rel_mahasiswa_paketsoal.findOne({
         where: {
           [Op.and]: [{id_mhs: pkSoal.id_mhs}, {id_paket: pkSoal.PaketSoals.id_paket}]
         }
@@ -450,7 +481,8 @@ module.exports = {
       CacheControl.postWaktuMulai();
       res.status(200).json({
         success: true,
-        msg: 'waktu mulai berhasil ditambahkan'
+        msg: 'waktu mulai berhasil ditambahkan',
+        data: data
       });
     } catch (error) {
       next(error);
@@ -465,27 +497,33 @@ module.exports = {
       if(id_ujian){
         obj = {id_ujian: id_ujian}
       } else if(id_paket){
-        obj = {id_paket: {[Op.like]:'%' + id_paket + '%'}}
+        obj = {id_paket: id_paket }
       }
       const pkSoal = await req.user.getMahasiswa({
         attributes:['id_mhs'],
-        include: { model: Paket_soal, as: 'PaketSoals', where: obj }
+        include: { model: models.Paket_soal, as: 'PaketSoals', where: obj },
+        raw: true, nest: true
       });
-      if(!pkSoal) throw createError.NotFound('data paket-soal tidak ditemukan.');
-      const waktu_mulai = await Rel_mahasiswa_paketsoal.findOne({
+      if(!pkSoal) throw createError.NotFound('data ujian/paket-soal tidak ditemukan.');
+      const waktu_mulai = await models.Rel_mahasiswa_paketsoal.findOne({
         attributes: ['waktu_mulai'],
         where: {
           [Op.and]: [{id_mhs: pkSoal.id_mhs}, {id_paket: pkSoal.PaketSoals.id_paket}]
         }
       });
-      const startTime = waktu_mulai.split(' ')[1];
+      const startTime = waktu_mulai.waktu_mulai.split(' ')[1];
       const endTime = waktu_selesai.split(' ')[1];
-      const durasi = timeDiff(startTime, endTime);
+      const durasi = helpers.timeDiff(startTime, endTime);
       const updateVal = {
         waktu_selesai: waktu_selesai,
         lama_pengerjaan: durasi
       }
-      await Rel_mahasiswa_paketsoal.update(updateVal, {
+      await models.Rel_mahasiswa_paketsoal.update(updateVal, {
+        where: {
+          [Op.and]: [{id_mhs: pkSoal.id_mhs}, {id_paket: pkSoal.PaketSoals.id_paket}]
+        }
+      });
+      const data = await models.Rel_mahasiswa_paketsoal.findOne({
         where: {
           [Op.and]: [{id_mhs: pkSoal.id_mhs}, {id_paket: pkSoal.PaketSoals.id_paket}]
         }
@@ -493,7 +531,8 @@ module.exports = {
       CacheControl.postWaktuSelesai();
       res.status(200).json({
         success: true,
-        msg: 'waktu selesai dan lama pengerjaan berhasil ditambahkan'
+        msg: 'waktu selesai dan lama pengerjaan berhasil ditambahkan',
+        data: data
       });
     } catch (error) {
       next(error);
@@ -507,17 +546,17 @@ module.exports = {
       const mhs = await user.getMahasiswa({
         attributes: ['id_mhs'],
         include: {
-          model: Kelas, as: 'Kelases', where: {id_kelas: idKelas}, 
+          model: models.Kelas, as: 'Kelases', where: {id_kelas: idKelas}, 
           attributes: ['id_kelas'], through: {attributes:[]},
           include: {
-            model: Ujian, as: 'Ujians', where: { [Op.and]: [
+            model: models.Ujian, as: 'Ujians', where: { [Op.and]: [
                 {[Op.or]: [
                   {status_ujian: 'akan dimulai'}, {status_ujian: 'sedang berlangsung'}
                 ]}, {aktif: 1}
               ]
             }, 
             attributes: ['id_ujian'], through: {attributes:[]},
-            include: {model: Paket_soal, as: 'PaketSoals', where: {aktif: 1},  
+            include: {model: models.Paket_soal, as: 'PaketSoals', where: {aktif: 1},  
               attributes: ['id_paket']}
           }
         }
@@ -532,10 +571,9 @@ module.exports = {
       const kelasPkSoal = jp.query(mhsJson, '$.Kelases[*].Ujians[*].PaketSoals[*]');
       if(!kelasPkSoal){ res.status(200).json(null); }
       const pkSoal = jp.query(kelasPkSoal, '$..id_paket');
-      console.log(pkSoal);
       const randomPaket = Math.floor(Math.random() * pkSoal.length);
       const id_paket = pkSoal[randomPaket]
-      await Rel_mahasiswa_paketsoal.create({
+      const data = await models.Rel_mahasiswa_paketsoal.create({
         id_mhs: mhsJson.id_mhs,
         id_paket: id_paket
       });
@@ -543,7 +581,7 @@ module.exports = {
       res.status(201).json({
         success: true,
         msg: `mahasiswa dengan id ${mhsJson.id_mhs}, berhasil direlasikan dengan paket ${id_paket}`,
-        id_paket: id_paket
+        data: data
       })
     } catch (error) {
       next(error);
@@ -551,23 +589,25 @@ module.exports = {
   },
 
   async getUjian(req, res, next){
-    try {      
+    try {
+      if(req.query) return next('route');
+      if(req.url == '/ujian/pdf' || req.url == '/ujian/xlsx') return next('route');
       let { id_ujian, id_paket } = req.params;
       let obj;
       if(id_ujian){
         obj = {id_ujian: id_ujian}
       } else if(id_paket){
-        obj = {id_paket: {[Op.like]:'%' + id_paket + '%'}}
+        obj = {id_paket: id_paket}
       }
       const pkSoal = await req.user.getMahasiswa({
         attributes:['id_mhs'],
         include: {
-          model: Paket_soal, as: 'PaketSoals', where: obj,
+          model: models.Paket_soal, as: 'PaketSoals', where: obj,
           include: [
-            {model: Ujian, as: 'Ujian',
-              include: {model: Ref_jenis_ujian, as: 'RefJenis'}
+            {model: models.Ujian, as: 'Ujian',
+              include: {model: models.Ref_jenis_ujian, as: 'RefJenis'}
             },
-            {model: Soal_essay, as: 'Soals', 
+            {model: models.Soal_essay, as: 'Soals', 
               attributes: ['id_soal'], through: {attributes: []}
             }
           ]
@@ -586,6 +626,7 @@ module.exports = {
         waktu_mulai: json.Ujian.waktu_mulai,
         durasi_ujian: json.Ujian.durasi_ujian,
         durasi_per_soal: json.Ujian.durasi_per_soal,
+        nilai_akhir: json.Rel_mahasiswa_paketsoal.nilai_total,
         waktu_mulai_pengerjaan: json.Rel_mahasiswa_paketsoal.waktu_mulai,
         waktu_selesai_pengerjaan: json.Rel_mahasiswa_paketsoal.waktu_selesai,
         lama_pengerjaan: json.Rel_mahasiswa_paketsoal.lama_pengerjaan,
@@ -632,66 +673,72 @@ module.exports = {
   //   }
   // },
 
-  async getAllUjianS(req, res, next){
-    try {
-      const mhs = await req.user.getMahasiswa({
-        attributes: ['id_mhs'],
-        include: [
-          {model: Paket_soal, as: 'PaketSoals', 
-            attributes: ['id_paket', 'kode_paket', 'id_ujian'],
-            include: {model: Ujian, as: 'Ujian', attributes: ['judul_ujian']}
-          }
-        ]
-      });
-      const paket = mhs.PaketSoals.map((i) => {
-        return {
-          id_paket: i.id_paket,
-          kode_paket: i.kode_paket,
-          judul_ujian: i.Ujian.judul_ujian
-        }
-      });
-      if (paket.length === 0) {paket.push('No Record...')}
-      CacheControl.getAllUjianMhsS(req);
-      res.status(200).json({
-        paket_soal: paket
-      })
-    } catch (error) {
-      next(error);
-    }
-  },
+  // async getAllUjianS(req, res, next){
+  //   try {
+  //     const mhs = await req.user.getMahasiswa({
+  //       attributes: ['id_mhs'],
+  //       include: [
+  //         {model: models.Paket_soal, as: 'PaketSoals', 
+  //           attributes: ['id_paket', 'kode_paket', 'id_ujian'],
+  //           include: {model: models.Ujian, as: 'Ujian', attributes: ['judul_ujian']}
+  //         }
+  //       ]
+  //     });
+  //     const paket = mhs.PaketSoals.map((i) => {
+  //       return {
+  //         id_paket: i.id_paket,
+  //         kode_paket: i.kode_paket,
+  //         judul_ujian: i.Ujian.judul_ujian
+  //       }
+  //     });
+  //     if (paket.length === 0) {paket.push('No Record...')}
+  //     CacheControl.getAllUjianMhsS(req);
+  //     res.status(200).json({
+  //       paket_soal: paket
+  //     })
+  //   } catch (error) {
+  //     next(error);
+  //   }
+  // },
 
-  async getAllUjianL(req, res, next){
+  async getorsearchUjianHistory(req, res, next){
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      let { find, page, limit } = req.query;
+      const pages = parseInt(page) || 1;
+      const limits = parseInt(limit) || config.pagination.pageLimit;
       const mhs = await req.user.getMahasiswa({attributes: ['id_mhs']});
-      let opt = {
-        where: {id_mhs: mhs.id_mhs},
-        include: [
-          {model: Paket_soal, as: 'PaketSoals',
-            through: {
-              attributes: [
-                'nilai_total','waktu_mulai','waktu_selesai','lama_pengerjaan'
-              ],
-              where: {waktu_selesai: {[Op.ne]: null}}
-            },
-            offset: (pages - 1) * limits,
-            limit: limits,
-            include: [
-              {model: Ujian, as: 'Ujian', 
-                include: {model: Ref_jenis_ujian, as: 'RefJenis'}
-              }
-            ]
-          }
-        ],
+      let finderOpt = {
+        where: {[Op.and]: [
+            {'$Ujian.status_ujian$': {[Op.ne]: 'draft'}}
+          ]
+        },
+        offset: (pages - 1) * limits,
+        limit: limits,
+        subQuery: false,
+        include: [{
+          model: models.Ujian, as: 'Ujian', 
+          include: [{model: models.Ref_jenis_ujian, as: 'RefJenis'}]
+        }],
         order: [
-          [ { model: Paket_soal, as: 'PaketSoals' }, 
-            { model: Ujian, as: 'Ujian' }, 'created_at','ASC'] 
+          [ { model: models.Ujian, as: 'Ujian' }, 'created_at','ASC'] 
         ]
       }
-      const pk = await paginator(Mahasiswa, pages, limits, opt)
-      const pkJson = pk.results[0].toJSON()
-      const paket = pkJson.PaketSoals.map((i) => {
+      if(find){
+        if(find == 'draft') throw createError.Forbidden('no access!');
+        const validator = searchsValid.ujianValidator(find, 'mhs');
+        if (validator instanceof createError) throw validator;
+        finderOpt.where = {[Op.and]: [
+            {'$Ujian.status_ujian$': {[Op.ne]: 'draft'}}, {[Op.or]: validator}
+          ]
+        }
+      }
+      const ujian = await mhs.getPaketSoals(finderOpt)
+      let opt = {
+        finder: ujian,
+        model: models.Paket_soal
+      };
+      const result = await helpers.paginatorMN(opt, pages, limits);
+      const paket = result.results.map((i) => {
         return {
           id_paket: i.id_paket,
           kode_paket: i.kode_paket,
@@ -701,14 +748,15 @@ module.exports = {
           judul_ujian: i.Ujian.judul_ujian,
           tanggal_mulai: i.Ujian.tanggal_mulai,
           waktu_mulai: i.Ujian.waktu_mulai,
+          status_ujian: i.Ujian.status_ujian,
           aktif: i.Ujian.aktif
         }
       });
       if (paket.length === 0) {paket.push('No Record...')}
       CacheControl.getAllUjianMhsL(req);
       res.status(200).json({
-        next: pk.next,
-        previous: pk.previous,
+        next: result.next,
+        previous: result.previous,
         paket_soal: paket
       });
     } catch (error) {
@@ -716,73 +764,70 @@ module.exports = {
     }
   },
 
-  async getUjianbyStatus(req, res, next){
-    try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-      let status = req.params.status;
-      status = decodeURIComponent(status).toLocaleLowerCase();
-      if(status==='draft') throw createError.Forbidden('no access!');
-      const mhs = await req.user.getMahasiswa({attributes: ['id_mhs']});
-      let opt = {
-        attributes: ['id_mhs'],
-        where: {[Op.and]: [{id_mhs: mhs.id_mhs},
-          {'PaketSoals.Ujian.status_ujian': {[Op.like]:'%'+ status +'%'}},
-          {'PaketSoals.Ujian.aktif': {[Op.eq]: 1}}
-        ]},
-        include: [
-          {
-            model: Paket_soal, as: 'PaketSoals', 
-            through: {attributes: []},
-            required: true, 
-            offset: (pages - 1) * limits,
-            limit: limits,
-            subQuery: false,
-            include: {
-              model: Ujian, as: 'Ujian', include: [
-                {model: Kelas, as: 'Kelases', attributes: ['id_kelas']},
-                {model: Ref_jenis_ujian, as: 'RefJenis'}
-              ]
-            }
-          }
-        ]
-      }      
-      const paket = await paginator(Mahasiswa, pages, limits, opt)
-      const data = paket.results[0].PaketSoals.map((i) => {
-        return {
-          id_paket: i.id_paket,
-          kode_paket: i.kode_paket,
-          thumbnail_ujian: i.Ujian.illustrasi_ujian,
-          jenis_ujian: i.Ujian.RefJenis.jenis_ujian,
-          judul_ujian: i.Ujian.judul_ujian,
-          tanggal_mulai: i.Ujian.tanggal_mulai,
-          waktu_mulai: i.Ujian.waktu_mulai,
-          status_ujian: i.Ujian.status,
-          aktif: i.Ujian.aktif,
-          kelas: i.Ujian.Kelases,
-        }
-      });
-      if (data.length === 0) {data.push('No Record...')}
-      CacheControl.getAllUjianbyStatus(req);
-      res.status(200).json({
-        next: paket.next,
-        previous: paket.previous,
-        paket_soal: data
-      });
-    } catch (error) {
-      next(error);
-    }
-  },
+  // async getUjianbyStatus(req, res, next){
+  //   try {
+  //     const pages = parseInt(req.query.page) || 1;
+  //     const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
+  //     let status = decodeURIComponent(req.params.status).toLocaleLowerCase();
+  //     if(status==='draft') throw createError.Forbidden('no access!');
+  //     const mhs = await req.user.getMahasiswa({attributes: ['id_mhs']});
+  //     let opt = {
+  //       attributes: ['id_mhs'],
+  //       where: {[Op.and]: [{id_mhs: mhs.id_mhs},
+  //         {'$PaketSoals.Ujian.status_ujian$': {[Op.like]:'%'+ status +'%'}},
+  //         {'$PaketSoals.Ujian.aktif$': {[Op.eq]: 1}}
+  //       ]},
+  //       include: {
+  //         model: models.Paket_soal, as: 'PaketSoals', 
+  //         through: {attributes: []},
+  //         // required: true, 
+  //         offset: (pages - 1) * limits, // BIKIN KAYAK DOSEN BUAT M-M
+  //         limit: limits,
+  //         // subQuery: false,
+  //         include: {
+  //           model: models.Ujian, as: 'Ujian', include: [
+  //             {model: models.Kelas, as: 'Kelases', attributes: ['id_kelas']},
+  //             {model: models.Ref_jenis_ujian, as: 'RefJenis'}
+  //           ]
+  //         }
+  //       }
+  //     }      
+  //     const paket = await helpers.paginator(models.Mahasiswa, pages, limits, opt)
+  //     const data = paket.results[0].PaketSoals.map((i) => {
+  //       return {
+  //         id_paket: i.id_paket,
+  //         kode_paket: i.kode_paket,
+  //         thumbnail_ujian: i.Ujian.illustrasi_ujian,
+  //         jenis_ujian: i.Ujian.RefJenis.jenis_ujian,
+  //         judul_ujian: i.Ujian.judul_ujian,
+  //         tanggal_mulai: i.Ujian.tanggal_mulai,
+  //         waktu_mulai: i.Ujian.waktu_mulai,
+  //         status_ujian: i.Ujian.status,
+  //         aktif: i.Ujian.aktif,
+  //         kelas: i.Ujian.Kelases,
+  //       }
+  //     });
+  //     if (data.length === 0) {data.push('No Record...')}
+  //     CacheControl.getAllUjianbyStatus(req);
+  //     res.status(200).json({
+  //       next: paket.next,
+  //       previous: paket.previous,
+  //       paket_soal: data
+  //     });
+  //   } catch (error) {
+  //     next(error);
+  //   }
+  // },
   // Soal Operation
   async getSoal(req, res, next){
     try {
       const id_relasi = req.params.id_relasi_soalpksoal;
-      const rel = await Rel_paketsoal_soal.findOne({
+      const rel = await models.Rel_paketsoal_soal.findOne({
         attributes: {exclude: ['kata_kunci_soal']},
         where: {id: id_relasi},
         include: [
-          {model: Soal_essay, as: 'Soal', include: {
-            model: Matakuliah, as: 'Matkul', attributes: ['nama_matkul']}
+          {model: models.Soal_essay, as: 'Soal', include: {
+            model: models.Matakuliah, as: 'Matkul', attributes: ['nama_matkul']}
           },
         ]
       });
@@ -807,49 +852,8 @@ module.exports = {
     }
   },
   // Jawaban Operation
-  async getAllJawaban(req, res, next){
-    try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-      const mhs = await req.user.getMahasiswa({attributes:['id_mhs']});
-      let opt = {        
-        where: {id_mhs: mhs.id_mhs},
-        offset: (pages - 1) * limits,
-        limit: limits,
-        include: [{model: Rel_paketsoal_soal, as: 'RelPaketSoal',
-          include: {model: Paket_soal, as: 'PaketSoal', attributes: ['id_paket', 'kode_paket']}
-        }],
-        order: [['id_jawaban','ASC']]
-      }
-      const vals = await paginator(Jawaban_mahasiswa, pages, limits, opt);
-      const jawaban = vals.results.map((i) => {
-        return {
-          id_jawaban: i.id_jawaban,                  
-          no_urut_soal: i.RelPaketSoal.no_urut_soal,
-          bobot_soal: i.RelPaketSoal.bobot_soal,
-          kata_kunci_soal: i.RelPaketSoal.kata_kunci_soal,
-          jawaban: i.jawaban,
-          nilai_jawaban: i.nilai_jawaban,
-          paket_soal: {
-            id_paket: i.RelPaketSoal.PaketSoal.id_paket,
-            kode_paket: i.RelPaketSoal.PaketSoal.kode_paket,
-          }
-        }
-      })
-      if (jawaban.length === 0) {jawaban.push('No Record...')}
-      CacheControl.getAllJawabanMhs(req);
-      res.status(200).json({
-          next: vals.next,
-          previous: vals.previous,
-          jawaban: jawaban
-      });
-    } catch (error) {
-      next(error);
-    }
-  },
-
   async getAllJawabanUjian(req, res, next){
-    try {      
+    try {
       let { id_ujian, id_paket } = req.params;
       let opt; 
       if(id_paket) {
@@ -860,27 +864,28 @@ module.exports = {
       const paket = await getJwbn(opt);
       if(paket){
         const mhs = await req.user.getMahasiswa({attributes:['id_mhs']});
-        const pages = parseInt(req.query.page);
-        const limits = parseInt(req.query.limit);
-        let opt = {
+        const pages = parseInt(req.query.page) || 1;
+        const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
+        let Opt = {
           attributes: ['id_jawaban', 'jawaban', 'nilai_jawaban'],
-          where: {[Op.and]: [{
-            id_mhs: mhs.id_mhs}, {[Op.or]: [
-              {'$RelPaketSoal.PaketSoal.id_paket$': {[Op.like]: '%' + id_paket + '%' }},
+          where: {[Op.and]: [
+            {id_mhs: mhs.id_mhs}, {[Op.or]: [
+              {'$RelPaketSoal.PaketSoal.id_paket$': {[Op.eq]: id_paket }},
               {'$RelPaketSoal.PaketSoal.id_ujian$': {[Op.eq]: id_ujian }}
             ]}
           ]},
           offset: (pages - 1) * limits,
           limit: limits,
-          include: [{model: Rel_paketsoal_soal, as: 'RelPaketSoal',
+          subQuery: false,
+          include: [{model: models.Rel_paketsoal_soal, as: 'RelPaketSoal',
             include: {
-              model: Paket_soal, as: 'PaketSoal', required: true, 
+              model: models.Paket_soal, as: 'PaketSoal', required: true, 
               attributes: ['id_paket', 'kode_paket', 'id_ujian']
             }
           }],
           order: [['id_jawaban','ASC']]
         }      
-        const vals = await paginator(Jawaban_mahasiswa, pages, limits, opt);
+        const vals = await helpers.paginator(models.Jawaban_mahasiswa, pages, limits, Opt);
         const jawaban = vals.results.map((i) => {
           return {
             id_jawaban: i.id_jawaban,
@@ -910,34 +915,37 @@ module.exports = {
     }
   },
 
-  async searchJawaban(req, res, next){
+  async getorsearchJawaban(req, res, next){
     try {
-      let { find } = req.query;      
-      const validator = jawabanValidator(find);
-      if (validator instanceof createError) throw validator;     
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      let { find, page, limit } = req.query;      
+      const pages = parseInt(page) || 1;
+      const limits = parseInt(limit) || config.pagination.pageLimit;
       const mhs = await req.user.getMahasiswa({attributes:['id_mhs']});
       let opt = {        
-        where: {[Op.and]: [{id_mhs: mhs.id_mhs}, {
-            [Op.or]: validator
-          }]
-        },
+        where: {id_mhs: mhs.id_mhs},
         offset: (pages - 1) * limits,
         limit: limits,
         subQuery: false,
-        include: [{model: Rel_paketsoal_soal, as: 'RelPaketSoal',
-          include: {model: Paket_soal, as: 'PaketSoal', attributes: ['id_paket', 'kode_paket']}
+        include: [{model: models.Rel_paketsoal_soal, as: 'RelPaketSoal',
+          include: {model: models.Paket_soal, as: 'PaketSoal', attributes: ['id_paket', 'kode_paket']}
         }],
         order: [['id_jawaban', 'ASC']]
       }
-      const vals = await paginator(Jawaban_mahasiswa, pages, limits, opt);      
+      if(find){
+        const validator = searchsValid.jawabanValidator(find);
+        if (validator instanceof createError) throw validator;
+        opt.where = { [Op.and]: [
+            {id_mhs: mhs.id_mhs}, {[Op.or]: validator}
+          ]
+        }
+      }
+      const vals = await helpers.paginator(models.Jawaban_mahasiswa, pages, limits, opt);      
       const jawaban = vals.results.map((i) => {
         return {
           id_jawaban: i.id_jawaban,
           no_urut_soal: i.RelPaketSoal.no_urut_soal,
           bobot_soal: i.RelPaketSoal.bobot_soal,
-          kata_kunci_soal: i.RelPaketSoal.kata_kunci_soal,
+          // kata_kunci_soal: i.RelPaketSoal.kata_kunci_soal,
           jawaban: i.jawaban,
           nilai_jawaban: i.nilai_jawaban,
           paket_soal: {
@@ -950,7 +958,7 @@ module.exports = {
       res.status(200).json({
         next: vals.next,
         previous: vals.previous,
-        soal: jawaban
+        jawaban: jawaban
       })
     } catch (error) {
       next(error);
@@ -966,10 +974,13 @@ module.exports = {
       }
       const jwbExist = await getJwbn(opt)
       if(jwbExist){
-        const jawaban = await Jawaban_mahasiswa.findOne({
+        const jawaban = await models.Jawaban_mahasiswa.findOne({
           where: {id_jawaban: idJawaban},
-          include: [{model: Rel_paketsoal_soal, as: 'RelPaketSoal',
-            include: {model: Paket_soal, as: 'PaketSoal', attributes: ['id_paket', 'kode_paket']}
+          include: [{model: models.Rel_paketsoal_soal, as: 'RelPaketSoal',
+            include: {
+              model: models.Paket_soal, as: 'PaketSoal', attributes: ['id_paket', 'kode_paket'],
+              include: { model: models.Ujian, as: 'Ujian', attributes: ['id_ujian', 'judul_ujian']}
+            }
           }],
         });
         if(!jawaban) throw createError.NotFound('data jawaban tidak ditemukan.')
@@ -985,10 +996,14 @@ module.exports = {
           video_jawaban: jawaban.video_jawaban,
           nilai_jawaban: jawaban.nilai_jawaban,
           created_at: jawaban.created_at,
-          updated_at: jawaban.updated_at,          
+          updated_at: jawaban.updated_at,
+          ujian: {
+            id_ujian: jawaban.RelPaketSoal.PaketSoal.Ujian.id_ujian,
+            judul_ujian: jawaban.RelPaketSoal.PaketSoal.Ujian.judul_ujian
+          },
           paket_soal: {
             id_paket: jawaban.RelPaketSoal.PaketSoal.id_paket,
-            kode_paket: jawaban.RelPaketSoal.PaketSoal.kode_paket
+            kode_paket: jawaban.RelPaketSoal.PaketSoal.kode_paket            
           }
         }
         CacheControl.getJawaban(req);
@@ -1007,7 +1022,7 @@ module.exports = {
       let { audio_jawaban, video_jawaban } = req.files,
       gmbrJawaban = [], audioJawaban, videoJawaban;
       const mhs = await req.user.getMahasiswa({attributes:['id_mhs']});
-      const jwbExist = await Jawaban_mahasiswa.findOne({
+      const jwbExist = await models.Jawaban_mahasiswa.findOne({
         where:{[Op.and]: [{id_mhs: mhs.id_mhs}, {jawaban: jawaban}]} // spam detection
       })
       if(jwbExist) throw createError.Conflict('data jawaban sudah terdaftar');
@@ -1028,7 +1043,7 @@ module.exports = {
       } else {
         videoJawaban = null;
       }
-      await Jawaban_mahasiswa.create({
+      const data = await models.Jawaban_mahasiswa.create({
         id_relasi_soalpksoal: id_relasi_soalpksoal,
         id_mhs: mhs.id_mhs,
         jawaban: jawaban,
@@ -1038,9 +1053,10 @@ module.exports = {
         created_at: fn('NOW')
       });
       CacheControl.postNewJawaban();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        msg: 'jawaban berhasil ditambahkan'
+        msg: 'jawaban berhasil ditambahkan',
+        data: data
       });      
     } catch (error) {
       next(error);
@@ -1049,7 +1065,10 @@ module.exports = {
 
   async setJawabanBulk(req, res, next){
     try {
-      const { array_jawaban } = req.body;
+      let { array_jawaban } = req.body;
+      if(typeof array_jawaban === 'string'){
+        array_jawaban = JSON.parse(array_jawaban);
+      }
       const idMhs = await req.user.getMahasiswa({attributes:['id_mhs']});
       const mapped = array_jawaban.map((i) => {
         return {
@@ -1062,11 +1081,21 @@ module.exports = {
           created_at: fn('NOW')
         }
       });
-      await Jawaban_mahasiswa.bulkCreate(mapped);
+      await models.Jawaban_mahasiswa.bulkCreate(mapped);
+      const pksoalId = await models.Rel_paketsoal_soal.findOne({ 
+        where: {
+          id: array_jawaban[0].id_relasi_soalpksoal
+        },
+        attributes: ['id_paket']
+      });
       CacheControl.postNewJawaban();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        msg: `sebanyak ${mapped.length} jawaban berhasil ditambahkan`
+        msg: `sebanyak ${mapped.length} jawaban berhasil ditambahkan`,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/paket-soal/${pksoalId.id_paket}`
+        }
       });
     } catch (error) {
       next(error);
@@ -1114,13 +1143,17 @@ module.exports = {
           video_jawaban: videoJawaban,
           updated_at: fn('NOW')
         }
-        await Jawaban_mahasiswa.update(updateVal, {
+        await models.Jawaban_mahasiswa.update(updateVal, {
+          where: { id_jawaban: idJawaban }
+        });
+        const data = await models.Jawaban_mahasiswa.findOne({
           where: { id_jawaban: idJawaban }
         });
         CacheControl.putJawaban();
         res.status(200).json({
           success: true,
-          msg: 'jawaban berhasil diedit'
+          msg: 'jawaban berhasil diedit',
+          data: data
         });
       } else {
         throw createError.Forbidden('maaf, anda tidak memiliki akses untuk mengubah jawaban ini!');
@@ -1139,12 +1172,12 @@ module.exports = {
       }
       const jwbExist = await getJwbn(opt)
       if(jwbExist){
-        const jawaban = await Jawaban_mahasiswa.findOne({
+        const jawaban = await models.Jawaban_mahasiswa.findOne({
           attributes: ['id_jawaban'],
           where:{id_jawaban: id_jawaban}
         });
         if (!jawaban) { throw createError.NotFound('data jawaban tidak ditemukan.')}
-        await Jawaban_mahasiswa.destroy({
+        await models.Jawaban_mahasiswa.destroy({
           where:{
             id_jawaban: id_jawaban
           }
@@ -1169,12 +1202,12 @@ module.exports = {
       if(id_ujian){
         obj = {id_ujian: id_ujian}
       } else if(id_paket){
-        obj = {id_paket: {[Op.like]:'%' + id_paket + '%'}}
+        obj = {id_paket: id_paket}
       }
       const nilai = await req.user.getMahasiswa({
         attributes: ['id_mhs'],
         include: [ 
-          {model: Paket_soal, as: 'PaketSoals', 
+          {model: models.Paket_soal, as: 'PaketSoals', 
           through: {attributes: ['nilai_total']}, where: obj,
           },
         ]
@@ -1197,26 +1230,26 @@ module.exports = {
       if(id_ujian){
         obj = {id_ujian: id_ujian}
       } else if(id_paket){
-        obj = {id_paket: {[Op.like]:'%' + id_paket + '%'}}
+        obj = {id_paket: id_paket}
       }
       const idMhs = await req.user.getMahasiswa({attributes:['id_mhs']});
-      const paket_soal = await Paket_soal.findAll({ 
+      const paket_soal = await models.Paket_soal.findAll({ 
         attributes: ['id_paket', 'id_ujian'],
         where: obj,
         include: {
-          model: Rel_paketsoal_soal, as: 'PaketSoal_Soal_auto',
+          model: models.Rel_paketsoal_soal, as: 'PaketSoal_Soal_auto',
           attributes: ['id', 'kata_kunci_soal'],
           where: {kata_kunci_soal: {[Op.ne]: null}},         
         },
         order: [
-          [{model: Rel_paketsoal_soal, as: 'PaketSoal_Soal_auto'}, 'id', 'ASC']
+          [{model: models.Rel_paketsoal_soal, as: 'PaketSoal_Soal_auto'}, 'id', 'ASC']
         ]
       });
       if(!paket_soal) {
         throw createError.NotFound('data paket-soal tidak ditemukan atau penilaian ujian berupa manual/campuran.');
       }
       const arrayId = jp.query(paket_soal, '$[*].PaketSoal_Soal_auto[*].id');
-      const jawaban = await Jawaban_mahasiswa.findAll({
+      const jawaban = await models.Jawaban_mahasiswa.findAll({
         attributes: ['id_jawaban', 'id_relasi_soalpksoal', 'jawaban'],
         where: {[Op.and]: [
           {id_mhs: idMhs.id_mhs},
@@ -1246,17 +1279,17 @@ module.exports = {
           nilai_jawaban: totalNilai
         }
       });
-      await Jawaban_mahasiswa.bulkCreate(nilaiJawaban, {
+      await models.Jawaban_mahasiswa.bulkCreate(nilaiJawaban, {
         updateOnDuplicate: ['id_jawaban', 'nilai_jawaban']
       });
-      const final = await Jawaban_mahasiswa.findAll({
+      const final = await models.Jawaban_mahasiswa.findAll({
         attributes: ['id_mhs', [fn('sum', col('nilai_jawaban')), 'nilai_total']],
         where: {[Op.and]: [
           {id_mhs: idMhs.id_mhs}, {id_relasi_soalpksoal: {[Op.in]: arrayId}}
         ]},
         group: ['id_mhs'],
-        include: {model: Rel_paketsoal_soal, as: 'RelPaketSoal', attributes: ['id'], 
-          include:{model: Paket_soal, as: 'PaketSoal', attributes: ['id_paket']}},
+        include: {model: models.Rel_paketsoal_soal, as: 'RelPaketSoal', attributes: ['id'], 
+          include:{model: models.Paket_soal, as: 'PaketSoal', attributes: ['id_paket']}},
         raw: true, nest: true
       });
       const data = final.map((i) => {        
@@ -1266,13 +1299,20 @@ module.exports = {
           nilai_total: parseInt(i.nilai_total),
         }
       });
-      await Rel_mahasiswa_paketsoal.bulkCreate(data, {
+      await models.Rel_mahasiswa_paketsoal.bulkCreate(data, {
         updateOnDuplicate: ['id_mhs', 'id_paket', 'nilai_total']
       });
       CacheControl.postNilaiAuto();
       res.status(200).json({
         success: true,
-        msg: 'nilai berhasil disimpan.'
+        msg: 'nilai berhasil disimpan.',
+        data: {
+          method: 'GET',
+          href: (
+            id_ujian ? `${req.protocol}://${req.get('host')}${req.baseUrl}/ujian/${id_ujian}`
+            : `${req.protocol}://${req.get('host')}${req.baseUrl}/paket-soal/${id_paket}`
+          )
+        }
       });
     } catch (error) {
       next(error);

@@ -1,3 +1,6 @@
+"use strict";
+const { format } = require('date-fns') 
+
 module.exports = (sequelize, DataTypes) => {
     const Rel_Mahasiswa_PaketSoal = sequelize.define('Rel_mahasiswa_paketsoal', {
         id: {
@@ -20,11 +23,31 @@ module.exports = (sequelize, DataTypes) => {
         },
         waktu_mulai: {
             type: DataTypes.DATE,
-            defaultValue: null
+            defaultValue: null,
+            get: function (){
+                const date = this.getDataValue('waktu_mulai');
+                if(date){
+                    return format(new Date(date), 'dd-MM-yyyy hh:mm:ss');
+                }
+                return date
+            },
+            set: function(val) {
+                return this.setDataValue('waktu_mulai', format(new Date(val), 'yyyy-dd-MM hh:mm:ss'));
+            }
         },
         waktu_selesai: {
             type: DataTypes.DATE,
-            defaultValue: null
+            defaultValue: null,
+            get: function (){
+                const date = this.getDataValue('waktu_selesai');
+                if(date){
+                    return format(new Date(date), 'dd-MM-yyyy hh:mm:ss')
+                }
+                return date
+            },
+            set: function(val) {
+                return this.setDataValue('waktu_selesai', format(new Date(val), 'yyyy-dd-MM hh:mm:ss'));
+            }
         },
         lama_pengerjaan: {
             type: DataTypes.STRING(30),

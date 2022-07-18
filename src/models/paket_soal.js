@@ -1,5 +1,5 @@
 // const { format } = require('date-fns') 
-
+"use strict";
 module.exports = (sequelize, DataTypes) => { 
     const Paket_soal = sequelize.define('Paket_soal', {
         id_paket: {
@@ -21,11 +21,17 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.BOOLEAN,
             allowNull: false,
             defaultValue: 1
+        },
+        updated_at: { 
+            type: DataTypes.DATE,
+            defaultValue: null
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
+        createdAt: 'created_at',
+        updatedAt: false,
         deletedAt: 'deleted_at'
     });
 

@@ -1,7 +1,10 @@
+/* eslint-disable no-useless-escape */
+"use strict";
 const Joi = require('joi').extend(require('@joi/date'));
 const createError = require('../errorHandlers/ApiErrors');
 const { User } = require('../models');
 const config = require('../config/dbconfig');
+const helpers = require('../helpers/global');
 
 const getUser = async obj => {
     return await User.findOne({
@@ -35,12 +38,13 @@ module.exports = {
         if(error){
             switch(error.details[0].context.key){
                 case 'username':
-                    msg = 'karakter yang boleh digunakan: a-z, A-Z, 0-9, spasi, underscore, panjang 6-20.'
+                    msg = 'karakter username yang boleh digunakan: a-z, A-Z, 0-9, spasi, underscore, panjang 6-20.'
                     break
                 case 'email':
                     msg = 'syntax email harus tepat!, ada @-nya...'
                     break
                 default:
+                    console.error(error)
                     msg = 'unknown error...coba refresh ulang.'
             }
             return next(createError.BadRequest(msg));
@@ -49,14 +53,16 @@ module.exports = {
         }
     },
 
-    tambahDosenCheck (req, res, next) {        
+    tambahDosenCheck (req, res, next) {       
+        if(req.url == '/dosen/bulk') return next('route'); 
         const schemaDosen = Joi.object({
             NIP: Joi.string().length(18),
             NIDN: Joi.string().length(10),
             NIDK: Joi.string().length(10).required(),
-            nama_lengkap: Joi.string().pattern(/^[a-zA-Z\\s]{2,}$/).required(),
+            nama_lengkap: Joi.string().pattern(/^[a-zA-Z\s]{2,}$/).required(),
             nomor_telp: Joi.string().min(9).max(12).truncate(),
-            email: Joi.string().email().required()
+            email: Joi.string().email().optional(),
+            alamat: Joi.string().max(100).truncate().optional(),
         });
 
         const { error } = schemaDosen.validate(req.body);
@@ -76,11 +82,14 @@ module.exports = {
                     msg = 'nama lengkap harus huruf a-z A-Z dan min 2 karakter'
                     break
                 case 'nomor_telp':
-                    msg = 'nomor harus angka dan max 12 karakter'
+                    msg = 'nomor telpon harus angka dan max 12 karakter'
                     break
                 case 'email':
                     msg = 'Email address harus memiliki @ dan domain email!'
-                    break               
+                    break
+                case 'alamat':
+                        msg = 'alamat harus huruf dan max 100 karakter'
+                    break
                 default:
                     console.error(error)
                     msg = 'unknown error...coba refresh ulang.'
@@ -91,12 +100,14 @@ module.exports = {
         }
     },
 
-    tambahMhsCheck (req, res, next) {        
+    tambahMhsCheck (req, res, next) {
+        if(req.url == '/mahasiswa/bulk') return next('route');
         const schemaMahasiswa = Joi.object({      
             NIM: Joi.string().length(10).required(),
-            nama_lengkap: Joi.string().pattern(/^[a-zA-Z\\s]{2,}$/).required(),
+            nama_lengkap: Joi.string().pattern(/^[a-zA-Z\s]{2,}$/).required(),
             nomor_telp: Joi.string().min(9).max(12).truncate(),
-            email: Joi.string().email().required()            
+            email: Joi.string().email().optional(),
+            alamat: Joi.string().max(100).truncate().optional(),           
         });
        
         const { error } = schemaMahasiswa.validate(req.body);
@@ -110,12 +121,16 @@ module.exports = {
                     msg = 'nama lengkap harus huruf a-z A-Z dan min 2 karakter'
                     break
                 case 'nomor_telp':
-                    msg = 'nomor harus angka dan max 12 karakter'
+                    msg = 'nomor telpon harus angka dan max 12 karakter'
                     break
                 case 'email':
                     msg = 'Email address harus memiliki @ dan domain email!'
                     break
+                case 'alamat':
+                    msg = 'alamat harus huruf dan max 100 karakter'
+                    break
                 default:
+                    console.error(error)
                     msg = 'unknown error...coba refresh ulang.'
             }
             return next(createError.BadRequest(msg));
@@ -124,45 +139,50 @@ module.exports = {
         }
     },
     
-    async isExistcheck (req, res, next) {           
-        const { NIP, NIDN, NIDK, NIM, email } = req.body        
+    async dosenExist (req, res, next) {           
+        const { NIP, NIDN, NIDK, email } = req.body        
         try {
-            let path = req.baseUrl + req.path;
-            if ( path === '/admin/dosen' || path === '/admin/dosen/' ) {
-                let errors1 = {
-                    nipExist: await getDosen({NIP:NIP}),
-                    nidnExist: await getDosen({NIDN:NIDN}),
-                    nidkExist: await getDosen({NIDK:NIDK}),
-                    emailExist: await getUser({email:email})
-                };
-                if (errors1.nipExist) {
-                    throw createError.Conflict('NIP sudah terdaftar!');
-                } else if (errors1.nidnExist) {
-                    throw createError.Conflict('NIDN sudah terdaftar!');
-                } else if (errors1.nidkExist) {
-                    throw createError.Conflict('NIDK sudah terdaftar!');
-                } else if (errors1.emailExist) {
-                    throw createError.Conflict('email sudah terdaftar!');
-                } else {
-                    return next();
-                }
-            } else if (  path === '/admin/mahasiswa' || path === '/admin/mahasiswa/' ) {        
-                let errors2 = {
-                    nimExist: await getMhs({NIM:NIM}),
-                    emailExist: await getUser({email:email})
-                };     
-                if (errors2.nimExist) {
-                     throw createError.Conflict('NIM sudah terdaftar!');
-                } else if (errors2.emailExist) {
-                     throw createError.Conflict('email sudah terdaftar!');
-                } else {
-                    return next();
-                }
+            let errors1 = {
+                nipExist: await getDosen({NIP:NIP}),
+                nidnExist: await getDosen({NIDN:NIDN}),
+                nidkExist: await getDosen({NIDK:NIDK}),
+                emailExist: await getUser({email:email})
+            };
+            if (errors1.nipExist) {
+                throw createError.Conflict('NIP sudah terdaftar!');
+            } else if (errors1.nidnExist) {
+                throw createError.Conflict('NIDN sudah terdaftar!');
+            } else if (errors1.nidkExist) {
+                throw createError.Conflict('NIDK sudah terdaftar!');
+            } else if (errors1.emailExist) {
+                throw createError.Conflict('email sudah terdaftar!');
+            } else {
+                return next();
             }
         } catch (error) {
             next(error)
         }
     },
+
+    async mhsExist (req, res, next) {           
+        const { NIM, email } = req.body        
+        try {
+            let errors2 = {
+                nimExist: await getMhs({NIM:NIM}),
+                emailExist: await getUser({email:email})
+            };     
+            if (errors2.nimExist) {
+                    throw createError.Conflict('NIM sudah terdaftar!');
+            } else if (errors2.emailExist) {
+                    throw createError.Conflict('email sudah terdaftar!');
+            } else {
+                return next();
+            }
+        } catch (error) {
+            next(error)
+        }
+    },
+
 
     async adminExist (req, res, next) {
         try {
@@ -185,7 +205,7 @@ module.exports = {
     matkulInputCheck(req, res, next) {
         const schemaMatkul = Joi.object({
             kode_matkul: Joi.string().pattern(/^[0-9]{8}$/).required(),
-            nama_matkul: Joi.string().pattern(/^[a-zA-Z\\s]{3,}$/).required(),
+            nama_matkul: Joi.string().pattern(/^[a-zA-Z\s\-\.\,\_]{3,}$/).required(),
             sks: Joi.number().max(5)
         });
 
@@ -203,12 +223,13 @@ module.exports = {
                     msg = 'Kode matakuliah minimal 8 karakter angka!'
                     break
                 case 'nama_matkul':
-                    msg = 'Matakuliah minimal 3 karakter, dan harus huruf (kapital/biasa)!'
+                    msg = 'nama matakuliah minimal 3 karakter, huruf (kapital/biasa), spasi, (koma/,), (titik/.), _, dan -'
                     break          
                 case 'sks':
                     msg = 'sks harus berupa angka dan max 5!'
                     break
                 default:
+                    console.error(error)
                     msg = 'unknown error...coba refresh ulang.'
             }
             return next(createError.BadRequest(msg));
@@ -230,7 +251,7 @@ module.exports = {
         }, msg;
         const { error } = schemaMatkul.validate(val);
 
-        if (error) { console.error(error)
+        if (error) { 
             switch (error.details[0].context.key) {
                 case 'kode_seksi!':
                     msg = 'kode_seksi minimal 10 karakter angka'
@@ -239,9 +260,10 @@ module.exports = {
                     msg = 'hari hanya senin - jumat!'
                     break          
                 case 'jam':
-                    msg = 'format harus 00:00 - 00:00, waktu mulai - waktu selesai'
+                    msg = 'format jam harus 00:00 - 00:00, waktu mulai - waktu selesai'
                     break
                 default:
+                    console.error(error)
                     msg = 'unknown error...coba refresh ulang.'
             }
             return next(createError.BadRequest(msg));
@@ -256,18 +278,17 @@ module.exports = {
                 Joi.string().email(),
                 Joi.string().pattern(/^[a-zA-Z0-9_\s-]{6,20}$/)
             ],
-            password: Joi.string().pattern(/^[a-zA-Z0-9]{6,20}$/)
+            password: Joi.string().pattern(/^[a-zA-Z0-9]{8,20}$/)
         });
 
         const { error } = schema.validate(req.body);
         let msg;
         if (error){
-            console.log(error)
             if (error.details[0].context.key === 'loginData'){
                 msg = `syntax email atau username salah, username min 6 karakter,<br>
                        huruf kapital/biasa, email harus ber-@`
             } else {
-                msg = 'syntax password salah'
+                msg = 'syntax password salah, min 8 karakter'
             }
             return next(createError.BadRequest(msg))
         } else {
@@ -280,13 +301,13 @@ module.exports = {
         const email_regex = /^[a-zA-Z0-9_+&*-]+(?:\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,7}$/;
         const match = email_regex.test(loginData);
         try {
-            if ( match === true ) {
+            if ( match ) {
                 req.user = await getUser({email: loginData});
                 if (!req.user){
                     throw createError.BadRequest('Email tidak terdaftar!');
                 }
                 return next();
-            } else if ( match === false ) {
+            } else if ( !match ) {
                 req.user = await getUser({username: loginData});
                 if (!req.user){
                     throw createError.BadRequest('Username tidak terdaftar!');
@@ -318,19 +339,23 @@ module.exports = {
         }
     },
 /* Dosen Input Validator */
-    UjianCheck(req, res, next){
+    async UjianCheck(req, res, next){
         const schemaUjianBase = Joi.object().keys({
             judul_ujian: Joi.string().min(5).max(100),
             jenis_ujian: Joi.string().valid('Penilaian Harian','Penilaian Tengah Semester',
                         'Penilaian Akhir Semester','Quiz',' '), 
             tanggal_mulai: Joi.date().format('DD-MM-YYYY'), 
-            waktu_mulai: Joi.string().regex(/^([0-9]{2})\\:([0-9]{2})\\:([0-9]{2})$/),
-            durasi_ujian: Joi.string().regex(/^([0-9]{2})\\:([0-9]{2})\\:([0-9]{2})$/),
+            waktu_mulai: Joi.string().regex(/^([0-9]{2})\:([0-9]{2})\:([0-9]{2})$/),
+            durasi_ujian: Joi.string().regex(/^([0-9]{2})\:([0-9]{2})\:([0-9]{2})$/),
+            bobot_per_soal: Joi.string().valid('sembunyikan', 'tampilkan'), 
+            status: Joi.string().valid('draft','akan dimulai', 'sedang berlangsung', 'selesai', ' '), 
             bobot_total: Joi.number().min(70).max(100).integer()            
         }).required();
+        let quota_soal;
+        if(req.body.durasi_ujian) quota_soal = await helpers.getQuotaSoal({ req: req });
 
         const schemaUjiandanSoal = schemaUjianBase.keys({            
-            quota_soal: Joi.number().integer(),
+            quota_soal: Joi.number().integer().default(quota_soal || 0),
             id_soal: Joi.any().when('quota_soal', { 
                 is: 0, then: Joi.array().max(50), otherwise: Joi.array().max(Joi.ref('quota_soal'))
             }),
@@ -355,7 +380,7 @@ module.exports = {
         }).required();
 
         const schemaUjianBulk = schemaUjiandanSoal.keys({
-            jml_paket:  Joi.number().integer().max(config.jmlpkmax)
+            jml_paket:  Joi.number().integer().min(1).max(config.jmlpkmax)
         }).required();
 
         let val = {
@@ -364,18 +389,17 @@ module.exports = {
             tanggal_mulai: req.body.tanggal_mulai,
             waktu_mulai: req.body.waktu_mulai,
             durasi_ujian: req.body.durasi_ujian,
-            bobot_total: req.body.bobot_total
+            bobot_total: req.body.bobot_total,
+            bobot_per_soal: req.body.bobot_per_soal
         }, result, msg;
 
-        if('quota_soal' in req.body === true && 'jml_paket' in req.body === false){
-            val.quota_soal = req.body.quota_soal;
+        if('jml_paket' in req.body === false){
             val.id_soal = req.body.id_soal;
             val.bobot_soal = req.body.bobot_soal;
             val.kata_kunci_soal = req.body.kata_kunci_soal;
             result = schemaUjiandanSoal.validate(val);
-        } else if('quota_soal' in req.body === true && 'jml_paket' in req.body === true) {
+        } else if('jml_paket' in req.body === true) {
             val.jml_paket = req.body.jml_paket;
-            val.quota_soal = req.body.quota_soal;
             val.id_soal = req.body.id_soal;
             val.bobot_soal = req.body.bobot_soal;
             val.kata_kunci_soal = req.body.kata_kunci_soal;
@@ -393,29 +417,30 @@ module.exports = {
                     msg = `jenis ujian harus antara:<br>
                             1.Penilaian Harian<br>
                             2.Penilaian Tengah Semester<br>
-                            3.Penilaian Akhir Semester`
+                            3.Penilaian Akhir Semester<br>
+                            4.Quiz`
                     break          
                 case 'tanggal_mulai':
-                    msg = 'format harus HARI/BULAN/TAHUN => DD/MM/YYYY, taruh 0 didepan angka satuan.'
+                    msg = 'format tanggal mulai harus HARI/BULAN/TAHUN => DD/MM/YYYY, taruh 0 didepan angka satuan.'
                     break
                 case 'waktu_mulai':
-                    msg = 'format harus 00:00:00 waktu 24 jam'
+                    msg = 'format waktu mulai harus 00:00:00 waktu 24 jam'
                     break
                 case 'durasi_ujian':
-                    msg = 'format harus 00:00:00 waktu 24 jam'
+                    msg = 'format durasi ujian harus 00:00:00 waktu 24 jam'
                     break
                 case 'bobot_total':
                     msg = 'bobot total min 70 max 100'
                     break
                 case 'jml_paket':
-                    msg = `jumlah paket tidak boleh melebihi ${config.jmlpkmax}`
+                    msg = `jumlah paket minimal 1 dan tidak boleh melebihi ${config.jmlpkmax}`
                     break
-                case 'quota_soal':
-                    msg = 'quota soal berupa angka!'
+                case 'bobot_per_soal':
+                    msg = 'bobot per soal harus antara tampilkan atau sembunyikan'
                     break
                 case 'id_soal':
-                    if(val.quota_soal){
-                        msg = `soal tidak boleh melebihi ${val.quota_soal} butir`
+                    if(quota_soal && quota_soal !== Infinity){
+                        msg = `soal tidak boleh melebihi ${quota_soal} butir`
                     } else {
                         msg = 'maksimal jumlah soal tidak berdurasi adalah 50 butir soal per ujian'
                     }
@@ -425,16 +450,20 @@ module.exports = {
                     break
                 case 'kata_kunci_soal':
                     if(val.quota_soal){
+                        console.error(result.error)
                         msg = `kata kunci soal harus berupa array of arrays of objects atau array of null.<br>
                                tiap object terdiri dari: <br>
                                1. "kata_kunci" max 25 huruf, <br>
-                               2. "bobot_kata" berupa angka max 100.`
+                               2. "bobot_kata" berupa angka max 100. <br>
+                               3. panjang array utama harus sesuai dengan panjang array id_soal`
                     } else {
+                        console.error(result.error)
                         msg = `kata kunci soal harus berupa array of arrays of objects atau array of null.<br>
                                tiap object terdiri dari: <br>
                                1. "kata_kunci" max 25 huruf, <br>
                                2. "bobot_kata" berupa angka max 100, <br>
-                               panjang array utama max 50`
+                               panjang array utama max 50 <br>
+                               3. panjang array utama harus sesuai dengan panjang array id_soal`
                     }
                     break
                 default:
@@ -447,9 +476,15 @@ module.exports = {
         }
     },
 
-    PaketSoalCheck(req, res, next){
-        const schemaPkSoalBase = Joi.object().keys({            
-            quota_soal: Joi.number().integer(),
+    async PaketSoalCheck(req, res, next){ 
+        let quota_soal; 
+        if(req.params.id_ujian){
+            quota_soal = await helpers.getQuotaSoal({ id_ujian: req.params.id_ujian });
+        } else {
+            quota_soal = await helpers.getQuotaSoal({ id_paket: req.params.id_paket });
+        }
+        const schemaPkSoalBase = Joi.object().keys({
+            quota_soal: Joi.number().integer().default(quota_soal),
             id_soal: Joi.any().when('quota_soal', { 
                 is: 0, then: Joi.array().max(50), otherwise: Joi.array().max(Joi.ref('quota_soal'))
             }),
@@ -474,11 +509,10 @@ module.exports = {
         }).required();
 
         const schemaPkSoalBulk = schemaPkSoalBase.keys({
-            jml_paket:  Joi.number().integer().max(config.jmlpkmax),
+            jml_paket:  Joi.number().integer().min(1).max(config.jmlpkmax),
         })
 
-        let val = {            
-            quota_soal: req.body.quota_soal,
+        let val = {
             id_soal: req.body.id_soal,
             bobot_soal: req.body.bobot_soal,
             kata_kunci_soal: req.body.kata_kunci_soal
@@ -494,14 +528,11 @@ module.exports = {
         if (result.error) {
             switch (result.error.details[0].path[0]) {
                 case 'jml_paket':
-                    msg = `jumlah paket berupa angka bulat, dan tidak boleh melebihi ${config.jmlpkmax}`
-                    break
-                case 'quota_soal':
-                    msg = 'quota soal harus berupa angka bulat'
+                    msg = `jumlah paket berupa angka bulat, minimal 1, dan tidak boleh melebihi ${config.jmlpkmax}`
                     break
                 case 'id_soal':
-                    if(val.quota_soal){
-                        msg = `soal tidak boleh melebihi ${val.quota_soal} butir`
+                    if(quota_soal && quota_soal !== Infinity){
+                        msg = `soal tidak boleh melebihi ${quota_soal} butir`
                     } else {
                         msg = 'maksimal jumlah soal tidak berdurasi adalah 50 butir soal per ujian'
                     }
@@ -510,17 +541,19 @@ module.exports = {
                     msg = 'bobot soal harus berupa angka, dan total bobot seluruh soal tidak boleh melebihi 100'
                     break
                 case 'kata_kunci_soal':
-                    if(val.quota_soal){
+                    if(quota_soal && quota_soal !== Infinity){
                         msg = `kata kunci soal harus berupa array of arrays of objects atau array of null.<br>
                                tiap object terdiri dari: <br>
                                1. "kata_kunci" max 25 huruf, <br>
-                               2. "bobot_kata" berupa angka max 100.`
+                               2. "bobot_kata" berupa angka max 100. <br>
+                               3. panjang array utama harus sesuai dengan panjang array id_soal`
                     } else {
                         msg = `kata kunci soal harus berupa array of arrays of objects atau array of null.<br>
                                 tiap object terdiri dari: <br>
                                 1. "kata_kunci" max 25 huruf, <br>
                                 2. "bobot_kata" berupa angka max 100, <br>
-                                panjang array utama max 50`
+                                panjang array utama max 50 <br>
+                                3. panjang array utama harus sesuai dengan panjang array id_soal`
                     }
                     break
                 default:
@@ -534,6 +567,7 @@ module.exports = {
     },
     
     SoalCheck(req, res, next){
+        if(req.url == '/soal-essay/bulk') return next('route');
         const schemaSoal = Joi.object({
             soal: Joi.string().min(15),
             status: Joi.string().valid('draft', 'terbit')
@@ -552,7 +586,7 @@ module.exports = {
                     msg = 'soal min 15 karakter'                    
                     break
                 case 'status':
-                    msg = 'antara draft atau terbit'
+                    msg = 'status harus antara draft atau terbit'
                     break
                 default:
                     console.error(error)
@@ -565,16 +599,15 @@ module.exports = {
     },
 
     BulkSoalCheck(req, res, next){
-        req.audioPatharr = [], req.videoPatharr = [];
         if (!req.files.soal_bulk) {
             return next(createError.BadRequest('File excel tidak boleh kosong!'));
-        } else if(req.files.soal_bulk[0].size > 2320924){
+        }
+        if(req.files.soal_bulk[0].size > 2320924){
             return next(createError.TooLarge('File excel terlalu besar, maksimal 2MB'));
         }
         if(req.files['audio_soal[]']){
             req.files['audio_soal[]'].forEach(i => {
                 if(i.size > 5000000) {
-                    req.audioPatharr.push(i.path);
                     return next(createError.TooLarge(`File audio ${i.originalname} terlalu besar, maksimal 5MB`));   
                 }
             });
@@ -582,7 +615,6 @@ module.exports = {
         if(req.files['video_soal[]']){
             req.files['video_soal[]'].forEach(i => {
                 if(i.size > 500000000) {
-                    req.videoPatharr.push(i.path);
                     return next(createError.TooLarge(`File video ${i.originalname} terlalu besar, maksimal 500MB`));
                 }
             });
@@ -592,7 +624,7 @@ module.exports = {
 
     BobotSoalCheck(req, res, next){        
         const schemaBobotSoal = Joi.object({
-            bobot_soal: Joi.number().max(100),
+            bobot_soal: Joi.number().min(0).max(100),
         }).required();
 
         let val = {
@@ -613,7 +645,7 @@ module.exports = {
         if (result.error) {
             switch (result.error.details[0].context.key) {
                 case 'bobot_total':
-                    msg = 'bobot berupa angka dan maksimal per-soal 100'
+                    msg = 'bobot total berupa angka dan maksimal per-soal 100'
                     break
                 default:
                     console.error(result.error)
@@ -661,7 +693,7 @@ module.exports = {
         if (result.error) {
             switch (result.error.details[0].path[0]) {
                 case 'kata_kunci_soal1':
-                    msg = `harus berupa array of objects tiap object terdiri dari: <br>
+                    msg = `kata kunci soal harus berupa array of objects tiap object terdiri dari: <br>
                            1. "kata_kunci" max 25 huruf, <br>
                            2. "bobot_kata" berupa angka max 100.`
                     break
@@ -683,41 +715,18 @@ module.exports = {
 
     TipePenilaianCheck(req, res, next){
         if(!req.body.tipe_penilaian){
-            const kata_kunci = req.body.kata_kunci_soal;
-            const soalLength = req.body.id_soal.length;
-            let totalArray = 0, totalNull = 0;
-            for(let i of kata_kunci){
-                if(Array.isArray(i)){
-                    totalArray++;
-                } else if(i == null){
-                    totalNull++;
-                } else {
-                    return next(createError.BadRequest(
-                        'kata kunci harus berupa array of arrays of objects atau array of null'
-                    ));
-                }
-            }
-            if(totalArray === soalLength && totalNull === 0){
-                req.body.tipe_penilaian = 'automatis';
-                return next();
-            } else if(totalNull === soalLength && totalArray === 0){
-               req.body.tipe_penilaian = 'manual';
-                return next();
-            } else if(totalArray !== 0 && totalArray < soalLength && 
-                      totalNull !== 0 && totalNull < soalLength){
-                req.body.tipe_penilaian = 'campuran';
-                return next();
-            } else {
-                return next(createError.BadRequest('format array kata kunci salah!'));
-            }
+            const tipe = helpers.tipePenilaian(req.body.kata_kunci_soal, req.body.id_soal);
+            req.body.tipe_penilaian = tipe;
+            return next();
         } else {
-            return next()
+            return next();
         }
     },
 
     NilaiCheck(req, res, next){
         const schemaNilaiSoal = Joi.object({
-           nilai: Joi.number().min(0).max(100)
+           nilai: Joi.number().min(0).max(100),
+           nilai_akhir: Joi.number().min(0).max(100).optional()
         }).required();
 
         const { error } = schemaNilaiSoal.validate(req.body);
@@ -726,6 +735,7 @@ module.exports = {
         if (error) {
             switch (error.details[0].context.key) {
                 case 'nilai':
+                case 'nilai_akhir':
                     msg = 'nilai harus berupa angka antara 0 - 100, dan tergantung bobot soal/ total nilai ujian'                    
                     break
                 default:
@@ -756,15 +766,16 @@ module.exports = {
             if(error){
                 switch(error.details[0].context.key){
                     case 'username':
-                        msg = 'karakter yang boleh digunakan: a-z, A-Z, 0-9, spasi, underscore, panjang 6-20.'
+                        msg = 'karakter username yang boleh digunakan: a-z, A-Z, 0-9, spasi, underscore, panjang 6-20.'
                         break
                     case 'email':
                         msg = 'syntax email harus tepat!, ada @-nya...'
                         break
                     case 'status_civitas':
-                        msg = 'pilihan yang diperbolehkan: aktif dan tidak aktif'
+                        msg = 'pilihan status-civitas yang diperbolehkan: aktif dan tidak aktif'
                         break
                     default:
+                        console.error(error)
                         msg = 'unknown error...coba refresh ulang.'
                 }
                 return next(createError.BadRequest(msg));
@@ -789,18 +800,19 @@ module.exports = {
             if(error){
                 switch(error.details[0].context.key){
                     case 'username':
-                        msg = 'karakter yang boleh digunakan: a-z, A-Z, 0-9, spasi, underscore, panjang 6-20.'
+                        msg = 'karakter username yang boleh digunakan: a-z, A-Z, 0-9, spasi, underscore, panjang 6-20.'
                         break
                     case 'email':
                         msg = 'syntax email harus tepat!, ada @-nya...'
                         break
                     case 'alamat':
-                        msg = 'maksimal 100 karakter'
+                        msg = 'alamat maksimal 100 karakter'
                         break
                     case 'no_telp':
-                        msg = 'harus 12 karakter'
+                        msg = 'nomor telpon harus 12 karakter'
                         break
                     default:
+                        console.error(error)
                         msg = 'unknown error...coba refresh ulang.'
                 }
                 return next(createError.BadRequest(msg));
@@ -813,8 +825,8 @@ module.exports = {
 /* Mahasiswa Input Validator */
     WaktuCheck(req, res, next){
         const schemaDateTime = Joi.object({
-            waktu_mulai: Joi.string().rule.pattern(/^(\d{2})(-|\/)(\d{2})(-|\/)(\d{4})\s(\d{2}):(\d{2}):(\d{2})$/),
-            waktu_selesai: Joi.string().rule.pattern(/^(\d{2})(-|\/)(\d{2})(-|\/)(\d{4})\s(\d{2}):(\d{2}):(\d{2})$/)
+            waktu_mulai: Joi.string().pattern(/^(\d{2})(-|\/)(\d{2})(-|\/)(\d{4})\s(\d{2}):(\d{2}):(\d{2})$/),
+            waktu_selesai: Joi.string().pattern(/^(\d{2})(-|\/)(\d{2})(-|\/)(\d{4})\s(\d{2}):(\d{2}):(\d{2})$/)
         }).xor('waktu_mulai', 'waktu_selesai');
 
         const { error } = schemaDateTime.validate(req.body);
@@ -824,7 +836,7 @@ module.exports = {
             switch (error.details[0].context.key) {
                 case 'waktu_mulai':
                 case 'waktu_selesai':
-                    msg = 'format harus berupa "YYYY-MM-DD hh:mm:ss" atau "YYYY/MM/DD hh:mm:ss"'
+                    msg = 'format waktu mulai/selesai harus serupa "YYYY-MM-DD hh:mm:ss" atau "YYYY/MM/DD hh:mm:ss"'
                     break
                 default:
                     console.error(error)

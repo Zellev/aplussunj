@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const User = sequelize.define('User', {
         id: { 
@@ -37,25 +38,16 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.TEXT,
             defaultValue: null
         },
-        created_at: { 
-            type: DataTypes.DATE,
-            allowNull: false           
-        },
         updated_at: { 
             type: DataTypes.DATE,
             defaultValue: null
         }
     }, {       
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
-        deletedAt: 'deleted_at',
-        indexes:[
-            {
-                name: 'archived_by_createdAt',
-                unique: false,
-                fields:['created_at', 'updated_at']
-            }
-        ]
+        createdAt: 'created_at',
+        updatedAt: false,
+        deletedAt: 'deleted_at'
     });
 
     User.associate = db => {
@@ -72,6 +64,11 @@ module.exports = (sequelize, DataTypes) => {
         User.hasOne(db.Token_history, {
             foreignKey: 'id_user',
             as: 'Token',
+            onDelete: 'CASCADE'
+        }),
+        User.hasOne(db.Lupa_pw, {
+            foreignKey: 'id_user',
+            as: 'LupaPw',
             onDelete: 'CASCADE'
         }),
         User.belongsTo(db.Ref_role, {

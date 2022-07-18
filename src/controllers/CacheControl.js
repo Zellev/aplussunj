@@ -14,12 +14,11 @@ const deleteClient = () => {return apicache.clear(['client-all'])};
 
 //AllUserController
 //get
-const getProfilSingkat = (req) => { return req.apicacheGroup = 'profil'};
+const getProfilSidebar = (req) => { return req.apicacheGroup = 'profil-s'};
+const getProfil = (req) => { return req.apicacheGroup = 'profil'};
 const getAllKelas = (req) => { return req.apicacheGroup = 'kelas-all'};
 const getKelas = (req) => { return req.apicacheGroup = 'kelas'};
 const getSoalPaketSoal = (req) => { return req.apicacheGroup = 'soal-paket-soal'};
-const getProfilDosen = (req) => { return req.apicacheGroup = 'profil-dosen'};
-const getProfilMhs = (req) => { return req.apicacheGroup = 'profil-mhs'};
 const getPengumuman = (req) => { return req.apicacheGroup = 'pengumuman'};
 const getNotifikasi = (req) => { return req.apicacheGroup = 'notifikasi'};
 const getIllustrasi = (req) => { return req.apicacheGroup = 'illustrasi'};
@@ -28,8 +27,7 @@ const getKelompokMatakuliah = (req) => { return req.apicacheGroup = 'kelompok-ma
 const getPeminatan = (req) => { return req.apicacheGroup = 'peminatan'};
 const getSemester = (req) => { return req.apicacheGroup = 'semester'};
 //post
-const postProfilePic = () => {return apicache.clear(['profil-dosen', 'myprofile-dosen', 
-'profil-mhs', 'myprofile-mhs'])};
+const postProfilePic = () => {return apicache.clear(['profil', 'profil-s'])};
 const postNotifikasi = () => {return apicache.clear(['notifikasi'])};
 const postNilaiAuto = () => {return apicache.clear(['nilai-total-mhs', 'nilai-akhir'])};
 
@@ -38,7 +36,6 @@ const postNilaiAuto = () => {return apicache.clear(['nilai-total-mhs', 'nilai-ak
 const getDashboardAdmin = (req) => { return req.apicacheGroup = 'dashboard-admin'};
 const getAllUser = (req) => { return req.apicacheGroup = 'user-all'};
 const getUser = (req) => { return req.apicacheGroup = 'user'};
-const getmyProfileAdmin = (req) => { return req.apicacheGroup = 'myprofile-admin'};
 const getAllDosen = (req) => { return req.apicacheGroup = 'dosen-all'};
 const getAllMhs = (req) => { return req.apicacheGroup = 'mhs-all'};
 const getAllMatkul = (req) => { return req.apicacheGroup = 'matkul-all'};
@@ -54,6 +51,7 @@ const getAllCaptcha = (req) => { return req.apicacheGroup = 'captcha-all'};
 const getAllSemester = (req) => { return req.apicacheGroup = 'semester-all'};
 const getAllNotifikasi = (req) => { return req.apicacheGroup = 'notifikasi-all'};
 const getNotifikasiAdm = (req) => { return req.apicacheGroup = 'notifikasi-admin'};
+const getAllSoftDeleted = (req) => { return req.apicacheGroup = 'soft-deleted'};
 //post
 const postNewUser = () => {return apicache.clear(['user-all', 'dosen-all', 'mhs-all', 'dashboard-admin'])};
 const postNewMatkul = () => {return apicache.clear(['dashboard-admin', 'matkul-all', 'matkul'])};
@@ -68,11 +66,9 @@ const postNewSemester = () => {return apicache.clear(['semester-all', 'semester'
 const postNewNotifikasi = () => {return apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi'])};
 const postNewIllustrasi = () => {return apicache.clear(['illustrasi'])};
 //put
-const putUser = () => {return apicache.clear(['user-all', 'user', 'profil-dosen', 'myprofile-dosen', 'profil-mhs', 
-'myprofile-mhs', 'dosen-all', 'mhs-all'])};
-const putmyProfileAdmin = () => {return apicache.clear(['myprofile-admin', 'user'])};
-const putDosen = () => {return apicache.clear(['dosen-all', 'profil-dosen', 'myprofile-dosen', 'dosen-kelas'])};
-const putMhs = () => {return apicache.clear(['mhs-all', 'profil-mhs', 'myprofile-mhs', 'mhs-kelas'])};
+const putUser = () => {return apicache.clear(['user-all', 'user', 'profil', 'dosen-all', 'mhs-all'])};
+const putDosen = () => {return apicache.clear(['dosen-all', 'profil', 'dosen-kelas'])};
+const putMhs = () => {return apicache.clear(['mhs-all', 'profil', 'mhs-kelas'])};
 const putMatkul = () => {return apicache.clear(['matkul-all', 'matkul', 'matkul-dosen-all', 'matkul-dosen'])};
 const putKelas = () => {return apicache.clear(['kelas-all', 'kelas', 'dashboard-dosen', 'kelas-dosen-all', 'dashboard-mhs',
 'kelas-mhs-all'])};
@@ -86,6 +82,7 @@ const putPengumuman = () => {return apicache.clear(['pengumuman-all', 'pengumuma
 const putCaptcha = () => {return apicache.clear(['captcha-all', 'captcha'])};
 const putSemester = () => {return apicache.clear(['semester-all', 'semester'])};
 const putNotifikasi = () => {return apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi'])};
+const putSoftDeleted = () => {return apicache.clear(['soft-deleted'])};
 //patch
 const patchStatusUjian = () => {return apicache.clear(['ujian-kelas', 'ujian-all', 'ujian', 'kelas', 'dashboard-dosen', 
 'dashboard-mhs', 'ujian-mhs', 'ujian-mhs-all-bystatus'])};
@@ -93,10 +90,9 @@ const patchKeaktifanUjian = () => {return apicache.clear(['ujian-kelas', 'ujian-
 'ujian-mhs', 'ujian-mhs-all-S', 'ujian-mhs-all-L', 'ujian-mhs-all-bystatus'])};
 const resetPw = () => {return apicache.clear(['lupapw'])};
 //delete
-const deleteUser = () => {return apicache.clear(['dashboard-admin', 'user', 'user-all', 'dosen-all', 'mhs-all', 'profil-dosen', 
-'myprofile-dosen', 'profil-mhs', 'myprofile-mhs', 'mhs-kelas', 'dosen-kelas'])};
-const deleteDosen = () => {return apicache.clear(['user-all', 'dosen-all', 'profil-dosen', 'myprofile-dosen', 'dosen-kelas'])};
-const deleteMhs = () => {return apicache.clear(['user-all', 'mhs-all', 'profil-mhs', 'myprofile-mhs', 'mhs-kelas'])};
+const deleteUser = () => {return apicache.clear(['dashboard-admin', 'user', 'user-all', 'dosen-all', 'mhs-all', 'profil', 'mhs-kelas', 'dosen-kelas'])};
+const deleteDosen = () => {return apicache.clear(['user-all', 'dosen-all', 'profil', 'dosen-kelas'])};
+const deleteMhs = () => {return apicache.clear(['user-all', 'mhs-all', 'profil', 'mhs-kelas'])};
 const deleteMatkul = () => {return apicache.clear(['dashboard-admin', 'matkul-all', 'matkul', 'matkul-dosen-all', 'matkul-dosen'])};
 const deleteKelas = () => {return apicache.clear(['kelas-all', 'kelas', 'dashboard-dosen', 'status-dosen', 'matkul-dosen-all',
 'matkul-dosen', 'kelas-dosen-all', 'dashboard-mhs', 'kelas-mhs-all'])};
@@ -114,10 +110,10 @@ const deleteCaptcha = () => {return apicache.clear(['captcha-all', 'captcha'])};
 const deleteSemester = () => {return apicache.clear(['semester-all', 'semester'])};
 const deleteNotifikasi = () => {return apicache.clear(['notifikasi-all', 'notifikasi-admin', 'notifikasi'])};
 const deleteIllustrasi = () => {return apicache.clear(['illustrasi'])};
+const permaDelete = () => {return apicache.clear(['soft-deleted'])};
 
 //DosenController
 //get
-const getmyProfileDosen = (req) => { return req.apicacheGroup = 'myprofile-dosen'};
 const getDashboardDosen = (req) => { return req.apicacheGroup = 'dashboard-dosen'};
 const getStatus = (req) => { return req.apicacheGroup = 'status-dosen'};
 const getAllMatkulDosen = (req) => { return req.apicacheGroup = 'matkul-dosen-all'};
@@ -137,15 +133,15 @@ const getAllSoalMk = (req) => { return req.apicacheGroup = 'soal-matkul-all'};
 const postNewUjianDraft = () => { return apicache.clear(['ujian-all', 'ujian', 'ujian-kelas', 'dashboard-dosen', 'status-dosen'])};
 const postNewUjianAktif = () => { return apicache.clear(['ujian-all', 'ujian', 'ujian-kelas', 'kelas', 'dashboard-dosen', 'status-dosen'])};
 const postNewPaketSoal = () => { return apicache.clear(['ujian', 'soal-paket-soal', 'paket-soal', 'paket-soal-mhs'])};
-const postNewSoalPkSoal = () => { return apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian'])};
+const postNewSoalUjian = () => { return apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian'])};
 const postNewNilaiTotal = () => { return apicache.clear(['nilai-total-mhs', 'nilai-akhir'])};
 const postNewNilaiUjian = () => { return apicache.clear(['jawaban', 'jawaban-soal', 'jawaban-soal-anon', 'nilai-total-mhs', 'ujian-mhs', 
 'nilai-akhir'])};
 const postNewSoal = () => { return apicache.clear(['soal-all', 'soal-paket-soal', 'soal-matkul-all'])};
 const postputNilaiJawaban = () => { return apicache.clear(['jawaban', 'jawaban-soal', 'jawaban-soal-anon'])};
 //put
-const putmyProfileDosen = () => { return apicache.clear(['myprofile-dosen', 'profil-dosen', 'user', 'user-all'])};
-const putSoalPkSoal = () => { return apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian'])};
+const putProfilDosen = () => { return apicache.clear(['profil', 'user', 'user-all'])};
+const putSoalUjian = () => { return apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian'])};
 const putSoal = () => { return apicache.clear(['soal-all', 'soal', 'soal-paket-soal', 'soal-matkul-all'])};
 //patch
 const patchKeaktifanPkSoal = () => { return apicache.clear(['ujian-kelas', 'paket-soal', 'paket-soal-mhs', 'ujian', 'soal-paket-soal', 
@@ -157,13 +153,12 @@ const patchAudioSoal = () => { return apicache.clear(['soal', 'soal-paket-soal',
 const patchVideoSoal = () => { return apicache.clear(['soal', 'soal-paket-soal', 'soal-penilaian'])};
 const patchStatusSoal = () => { return apicache.clear(['soal-all', 'soal', 'soal-paket-soal', 'soal-penilaian', 'soal-mhs'])};
 //delete
-const deleteSoalPkSoal = () => { return apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian'])};
+const deleteSoalUjian = () => { return apicache.clear(['soal-paket-soal', 'paket-soal', 'ujian', 'soal-penilaian'])};
 const deleteSoal = () => { return apicache.clear(['soal-all', 'soal', 'soal-paket-soal', 'soal-penilaian'])};
 
 //MhsController
 //get
 const getDashboardMhs = (req) => { return req.apicacheGroup = 'dashboard-mhs'};
-const getmyProfileMhs = (req) => { return req.apicacheGroup = 'myprofile-mhs'};
 const getAllKelasMhs = (req) => { return req.apicacheGroup = 'kelas-mhs-all'};
 const getUjianMhs = (req) => { return req.apicacheGroup = 'ujian-mhs'};
 const getAllUjianMhsS = (req) => { return req.apicacheGroup = 'ujian-mhs-all-S'};
@@ -179,7 +174,7 @@ const postWaktuSelesai = () => {return apicache.clear(['paket-soal-mhs', 'nilai-
 const postPaketMhs = () => {return apicache.clear(['paket-soal-mhs', 'dashboard-mhs'])};
 const postNewJawaban = () => {return apicache.clear(['jawaban-mhs', 'jawaban-soal-anon', 'jawaban-soal', 'nilai-total-mhs'])};
 //put
-const putmyProfileMhs = () => {return apicache.clear(['myprofile-mhs', 'profil-mhs', 'user', 'user-all'])};
+const putProfilMhs = () => {return apicache.clear(['profil', 'user', 'user-all'])};
 const putKelasMhs = () => {return apicache.clear(['kelas-mhs-all'])};
 const putJawaban = () => {return apicache.clear(['jawaban-mhs', 'jawaban-soal-anon', 'jawaban-soal', 'nilai-total-mhs'])};
 //patch
@@ -194,35 +189,35 @@ module.exports = {
     deleteClient,
     postNewAdmin,
     /* AllUserController */
-    getProfilSingkat, getAllKelas, getKelas, getSoalPaketSoal, getProfilDosen, getProfilMhs,  
+    getProfilSidebar, getAllKelas, getKelas, getSoalPaketSoal, getProfil,  
     getPengumuman, getNotifikasi, getJenisUjian, getKelompokMatakuliah, getPeminatan, getSemester, 
     postProfilePic, postNotifikasi, postNilaiAuto,
     /* AdminController */
-    getDashboardAdmin, getAllUser, getUser, getmyProfileAdmin, getAllDosen, getAllMhs, getAllMatkul,
-    getMatkul, getMhsKelas, getDosenKelas, getUjianKelas, getAllUjian, getUjian, getLupapw, getAllPengumuman,
-    getAllCaptcha, getAllSemester, getAllNotifikasi, getNotifikasiAdm, getIllustrasi,
+    getDashboardAdmin, getAllUser, getUser, getAllDosen, getAllMhs, getAllMatkul,getMatkul, getMhsKelas, 
+    getDosenKelas, getUjianKelas, getAllUjian, getUjian, getLupapw, getAllPengumuman, getAllCaptcha, 
+    getAllSemester, getAllNotifikasi, getNotifikasiAdm, getIllustrasi, getAllSoftDeleted,
     postNewUser, postNewMatkul, postNewKelas, postNewMhsKelas, postNewDosenKelas, postNewIllustrasi,
     postNewUjianKelas, postNewMhsPkSoal, postNewPengumuman, postNewCaptcha, postNewSemester, postNewNotifikasi,
-    putUser, putmyProfileAdmin, putDosen, putMhs, putMatkul, putKelas, putMhsKelas, putDosenKelas,
-    putUjianKelas, putUjian, putMhsPkSoal, putPengumuman, putCaptcha, putSemester, putNotifikasi,
+    putUser, putDosen, putMhs, putMatkul, putKelas, putMhsKelas, putDosenKelas, putUjianKelas,
+    putUjian, putMhsPkSoal, putPengumuman, putCaptcha, putSemester, putNotifikasi, putSoftDeleted,
     patchStatusUjian, patchKeaktifanUjian, resetPw,
     deleteUser, deleteDosen, deleteMhs, deleteMatkul, deleteKelas, deleteMhsKelas, deleteDosenKelas,
     deleteUjianKelas, deleteUjian, deletePaketSoal, deleteMhsPkSoal, deleteLupapw, deletePengumuman,
-    deleteCaptcha, deleteSemester, deleteNotifikasi, deleteIllustrasi,
+    deleteCaptcha, deleteSemester, deleteNotifikasi, deleteIllustrasi, permaDelete,
     /* DosenController */
-    getmyProfileDosen, getDashboardDosen, getStatus, getAllMatkulDosen, getMatkulDosen, getAllKelasDosen,
+    getDashboardDosen, getStatus, getAllMatkulDosen, getMatkulDosen, getAllKelasDosen,
     getPaketSoal, getPaketSoalMhs, getNilaiTotalMhs, getSoalPenilaian, getAllJawabanSoalAnon, getAllJawabanSoal,
     getJawaban, getAllSoal, getSoal, getAllSoalMk,
-    postNewUjianDraft, postNewUjianAktif, postNewPaketSoal, postNewSoalPkSoal, postNewNilaiTotal, postNewNilaiUjian, 
+    postNewUjianDraft, postNewUjianAktif, postNewPaketSoal, postNewSoalUjian, postNewNilaiTotal, postNewNilaiUjian, 
     postNewSoal, postputNilaiJawaban, 
-    putmyProfileDosen, putSoalPkSoal, putSoal,
+    putProfilDosen, putSoalUjian, putSoal,
     patchKeaktifanPkSoal, patchBobotSoal, patchKunciSoal, patchGambarSoal, patchAudioSoal, patchVideoSoal, 
     patchStatusSoal,
-    deleteSoalPkSoal, deleteSoal,
+    deleteSoalUjian, deleteSoal,
     /* MhsController */
-    getmyProfileMhs, getDashboardMhs, getAllKelasMhs, getUjianMhs, getAllUjianMhsS, getAllUjianMhsL, getAllUjianbyStatus,
+    getDashboardMhs, getAllKelasMhs, getUjianMhs, getAllUjianMhsS, getAllUjianMhsL, getAllUjianbyStatus,
     getSoalMhs, getAllJawabanMhs, getNilaiAkhir,
     postKelasMhs, postWaktuMulai, postWaktuSelesai, postPaketMhs, postNewJawaban,
-    putmyProfileMhs, putKelasMhs, putJawaban,
+    putProfilMhs, putKelasMhs, putJawaban,
     deleteKelasMhs, deleteJawaban,
 }

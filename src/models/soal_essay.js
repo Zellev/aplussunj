@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => { 
     const Soal_essay  = sequelize.define('Soal_essay', {
         id_soal: { 
@@ -36,13 +37,25 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(50),
             defaultValue: null,
         },
+        kata_kunci_soal: {
+            type: DataTypes.STRING(200),
+            defaultValue: null,
+            get: function() {
+                if(this.getDataValue('kata_kunci_soal') == null){
+                    return this.getDataValue('kata_kunci_soal')
+                }
+                return JSON.parse(this.getDataValue('kata_kunci_soal'));
+            },
+            set: function(val) {
+                if(val == null){
+                    return this.setDataValue('kata_kunci_soal', val);
+                }
+                return this.setDataValue('kata_kunci_soal', JSON.stringify(val));                
+            }
+        },
         status: {
             type: DataTypes.ENUM('draft', 'terbit'),
             allowNull: false,
-        },        
-        created_at: { 
-            type: DataTypes.DATE,
-            allowNull: false           
         },
         updated_at: { 
             type: DataTypes.DATE,
@@ -50,16 +63,11 @@ module.exports = (sequelize, DataTypes) => {
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
-        deletedAt: 'deleted_at',
-        indexes:[
-            {
-                name: 'archived_by_createdAt',
-                unique: false,
-                fields:['created_at', 'updated_at']
-            }
-        ]
+        createdAt: 'created_at',
+        updatedAt: false,
+        deletedAt: 'deleted_at'
     });
 
     Soal_essay.associate = db => {

@@ -181,6 +181,12 @@
             <td>{{data_dosen.nama_lengkap}}</td>
           </tr>
           <tr>
+            <td>NIP</td>
+            <td>:</td>
+            <td>{{data_dosen.nip}}</td>
+          </tr>
+          <tr>
+          <tr>
             <td>NIDN</td>
             <td>:</td>
             <td>{{data_dosen.nidn}}</td>
@@ -249,7 +255,7 @@
         <tbody>
           {{#data_hasilUjian}}
             <tr class="row">
-              <td class="cell">{{incremented @index}}</td>
+              <td class="cell">{{no_ujian}}</td>
               <td class="cell">{{nama_mhs}}</td>
               <td class="cell">{{kode_paket}}</td>              
               <td class="cell">{{waktu_mulai_pengerjaan}}</td>
@@ -257,7 +263,7 @@
               <td class="cell">{{lama_pengerjaan}}</td>
               <td class="cell">{{nilai_total}}</td>
             </tr>
-          {{/dataHasilUjian}}
+          {{/data_hasilUjian}}
         </tbody>
         <tfoot>
           <tr>

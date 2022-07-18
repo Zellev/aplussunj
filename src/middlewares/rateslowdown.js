@@ -1,3 +1,4 @@
+"use strict";
 const slowDown = require("express-slow-down");
 const config = require('../config/dbconfig');
 

@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const Pengumuman = sequelize.define('Pengumuman', {
         id_pengumuman: { 
@@ -13,11 +14,17 @@ module.exports = (sequelize, DataTypes) => {
         status: {
             type: DataTypes.ENUM('tampil','tidak_tampil'),            
             allowNull: false
+        },
+        updated_at: { 
+            type: DataTypes.DATE,
+            defaultValue: null
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
+        createdAt: 'created_at',
+        updatedAt: false,
         deletedAt: 'deleted_at'
     });
 

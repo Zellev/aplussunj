@@ -1,3 +1,4 @@
+"use strict";
 class ApiError {
     constructor(code, message) {
       this.code = code;

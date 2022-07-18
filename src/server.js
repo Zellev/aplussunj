@@ -1,4 +1,5 @@
 /* eslint-disable no-useless-escape */
+"use strict";
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -60,7 +61,7 @@ const sslServer = https.createServer({
     // passphrase: config.ssl.passphrase
 }, app);
 
-sequelize.sync({}).then(() => {// ({force: true})
+sequelize.sync({}).then(() => {// force: true| alter: true
     sslServer.listen(config.port);
     console.log(`
     #  ┌─┐┌─┐┬    ╔═╗┌─┐┬─┐┬  ┬┌─┐┬─┐  ╔═╗┌┬┐┌─┐┬─┐┌┬┐┌─┐┌┬┐  #

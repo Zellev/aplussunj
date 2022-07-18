@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => { 
     const Jawaban_mahasiswa  = sequelize.define('Jawaban_mahasiswa', {
         id_jawaban: {
@@ -40,26 +41,17 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER(3),
             defaultValue: null
         },
-        created_at: { 
-            type: DataTypes.DATE,
-            allowNull: false
-        },
         updated_at: { 
             type: DataTypes.DATE,
             defaultValue: null
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
-        deletedAt: 'deleted_at',
-        indexes:[
-            {
-                name: 'archived_by_createdAt',
-                unique: false,
-                fields:['created_at', 'updated_at']
-            }
-        ]
+        createdAt: 'created_at',
+        updatedAt: false,
+        deletedAt: 'deleted_at'
     });
 
     Jawaban_mahasiswa.associate = db => {

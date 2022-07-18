@@ -2,7 +2,7 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    return queryInterface.bulkInsert('Ref_client',[
+    return queryInterface.bulkInsert('Ref_jenis_client',[
       {
         client: 'Website'
       },
@@ -10,18 +10,12 @@ module.exports = {
         client: 'Mobile'
       },
       {
-        client: 'iOS'
-      },
-      {
         client: 'Desktop'
-      },
-      {
-        client: 'MacOS'
       },
     ]);
   },
 
   down: async (queryInterface, Sequelize) => {
-    return queryInterface.bulkDelete('Ref_client', null, {});
+    return queryInterface.bulkDelete('Ref_jenis_client', null, {});
   }
 };

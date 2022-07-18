@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const Token_history = sequelize.define('Token_history', {
         id_user: { 
@@ -19,14 +20,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         }
     }, {
-        timestamps: false,
-        // indexes:[
-        //     {
-        //         name: 'user_token',                
-        //         fields: ['id_user', 'refresh_token'],
-        //         primaryKey: true
-        //     }
-        // ]
+        timestamps: false
     });
 
     Token_history.associate = db => {        

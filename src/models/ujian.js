@@ -1,3 +1,4 @@
+"use strict";
 const { format } = require('date-fns') 
 
 module.exports = (sequelize, DataTypes) => { 
@@ -70,27 +71,18 @@ module.exports = (sequelize, DataTypes) => {
         },
         deskripsi: {
             type: DataTypes.TEXT
-        },
-        created_at: { 
-            type: DataTypes.DATE,
-            allowNull: false           
-        },
+        },        
         updated_at: { 
             type: DataTypes.DATE,
             defaultValue: null
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
-        deletedAt: 'deleted_at',
-        indexes:[
-            {
-                name: 'archived_by_createdAt',
-                unique: false,
-                fields:['created_at', 'updated_at']
-            }
-        ]
+        createdAt: 'created_at',
+        updatedAt: false,
+        deletedAt: 'deleted_at'
     });
 
     Ujian.associate = db => {

@@ -14,14 +14,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/Zellev/appujianessay.git"
+    "url": "git+ssh://git@github.com/Zellev/aplussunj.git"
   },
   "author": "Azhar",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/Zellev/appujianessay/issues"
+    "url": "https://github.com/Zellev/aplussunj/issues"
   },
-  "homepage": "https://github.com/Zellev/appujianessay#readme",
+  "homepage": "https://github.com/Zellev/aplussunj#readme",
   "dependencies": {
     "@joi/date": "^2.1.0",
     "apicache": "^1.6.3",

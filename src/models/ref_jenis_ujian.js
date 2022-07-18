@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const Jenis_ujian = sequelize.define('Ref_jenis_ujian', {
         id_jenis_ujian: { 
@@ -10,10 +11,16 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(25),
             allowNull: true
         },
+        updated_at: { 
+            type: DataTypes.DATE,
+            defaultValue: null
+        }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
+        createdAt: 'created_at',
+        updatedAt: false,
         deletedAt: 'deleted_at'
     });
 

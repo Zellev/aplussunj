@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const Captcha = sequelize.define('Captcha', {
         id_captcha: { 
@@ -13,11 +14,17 @@ module.exports = (sequelize, DataTypes) => {
         jawaban: {
             type: DataTypes.STRING(5),            
             allowNull: false
+        },        
+        updated_at: { 
+            type: DataTypes.DATE,
+            defaultValue: null
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
+        createdAt: 'created_at',
+        updatedAt: false,
         deletedAt: 'deleted_at'
     });
 

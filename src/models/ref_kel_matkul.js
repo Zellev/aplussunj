@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const Kel_matkul = sequelize.define('Ref_kel_matkul', {
         id_kel_mk: { 
@@ -11,11 +12,17 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             unique:true
         },
+        updated_at: { 
+            type: DataTypes.DATE,
+            defaultValue: null
+        }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
-        deletedAt: 'deleted_at'      
+        createdAt: 'created_at',
+        updatedAt: false,
+        deletedAt: 'deleted_at'
     });
 
     Kel_matkul.associate = db => {

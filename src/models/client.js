@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const Client = sequelize.define('Client', {
         id_client: { 
@@ -20,35 +21,26 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(65),
             allowNull: false
         },
-        jenis_client: { 
+        id_jenis_client: { 
             type: DataTypes.INTEGER(11).UNSIGNED,
             allowNull: false,
         },
-        created_at: { 
-            type: DataTypes.DATE,
-            allowNull: false           
-         },
         updated_at: { 
             type: DataTypes.DATE,
             defaultValue: null
-         }
+        }
     }, {       
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
-        deletedAt: 'deleted_at',
-        indexes:[
-            {
-                name: 'archived_by_createdAt',
-                unique: false,
-                fields:['created_at', 'updated_at']
-            }
-        ]
+        createdAt: 'created_at',
+        updatedAt: false,
+        deletedAt: 'deleted_at'
     });
 
     Client.associate = db => {
-        Client.belongsTo(db.Ref_client, {
-            foreignKey: 'jenis_client',
-            as: 'Client'
+        Client.belongsTo(db.Ref_jenis_client, {
+            foreignKey: 'id_jenis_client',
+            as: 'Jenis_client'
         })        
     }
 

@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const Rel_Dosen_Kelas = sequelize.define('Rel_dosen_kelas', {
         id: {

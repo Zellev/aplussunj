@@ -1,7 +1,4 @@
-const { User, Dosen, Mahasiswa, Captcha, Lupa_pw, Matakuliah, Kelas, 
-        Paket_soal, Token_history, Ujian, Notifikasi, Pengumuman, 
-        Ref_kel_matkul, Ref_peminatan, Ref_semester, Ref_illustrasi, 
-        Ref_role, Ref_jenis_ujian, Rel_mahasiswa_paketsoal } = require('../models');
+"use strict";
 const models = require('../models');
 const config = require('../config/dbconfig');
 const path = require('path');
@@ -11,25 +8,11 @@ const CacheControl = require('../controllers/CacheControl');
 const pdf = require('html-pdf');
 const fs = require('fs');
 const createError = require('../errorHandlers/ApiErrors');
-const { promisify } = require('util');
-const unlinkAsync = promisify(fs.unlink);
-const { paginator, shuffleArray, todaysdate, dateFull, 
-        hashed, randomPic, pathAll, getModelPK } = require('../helpers/global');
-const { userValidator, dosenValidator, mhsValidator, 
-        ujianValidator, matkulValidator } = require('../validator/SearchValidator');
+const helpers = require('../helpers/global');
+const searchsValid = require('../validator/SearchValidator');
+const utility = require('util');
+const unlinkAsync = utility.promisify(fs.unlink);
 const { Op, fn } = require('sequelize');
-
-const getUser = async obj => {
-  return User.findOne({
-      where: obj
-  });
-}
-
-const getUserid = async () => {
-  return User.max('id').then((val) => {
-    return val + 1;
-  });
-}
 
 const dosen = (model, noreg) => {
   return model.findOne({
@@ -43,28 +26,26 @@ const dosen = (model, noreg) => {
 }
 
 const getStatus = async () => {
-  const users = await User.count();
-  const userAdmin = await User.count({
+  const users = await models.User.count();
+  const userAdmin = await models.User.count({
     where: {id_role: '1'}
   });
-  const userDosen = await User.count({
+  const userDosen = await models.User.count({
     where: {id_role: '2'}
   });
-  const userMahasiswa = await User.count({
+  const userMahasiswa = await models.User.count({
     where: {id_role: '3'}
   });
-  const matakuliah = await Matakuliah.count();
-  const kelas = await Kelas.count();
-  const ujian = await Ujian.count();
-  const today = new Date();
-  const date = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
-  const online = await Token_history.count({
-    where: {created_at: date},
+  const matakuliah = await models.Matakuliah.count();
+  const kelas = await models.Kelas.count();
+  const ujian = await models.Ujian.count();
+  const online = await models.Token_history.count({
+    where: {isValid: true},
     group: 'id_user'
   });
   return [{
     total_users: users,
-    total_online_users: online,
+    total_online_users: online.length,
     jumlah_admin: userAdmin,
     jumlah_dosen: userDosen,
     jumlah_mhs: userMahasiswa,
@@ -92,11 +73,11 @@ module.exports = {
     try {
       const arrObj = await getStatus();
       const options = {format: 'A4'};
-      const tanggal = dateFull();
+      const tanggal = helpers.dateFull();
       const img = 'data:image/png;base64,' + fs
           .readFileSync(path.resolve(__dirname,'../../public/pdftemplate','kop_surat.png'))
           .toString('base64');
-      res.render(pathAll('status.hbs', 'pdf'), {
+      res.render(helpers.pathAll('status.hbs', 'pdf'), {
         kop_surat: img,
         data: arrObj,
         tanggal: tanggal
@@ -109,7 +90,7 @@ module.exports = {
           const output = ((val) => {
             res.writeHead(200, {
               'Content-Type': 'application/pdf',
-              'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-status_app.pdf"`
+              'Content-Disposition': `attachment;filename="${req.user.id}_${helpers.todaysdate()}-status_app.pdf"`
             })
             const download = Buffer.from(val);
             res.end(download);
@@ -140,12 +121,12 @@ module.exports = {
       newWS.columns = reColumns;
       newWS.addRows(arrObj);
       newWS.mergeCells('A3:H3');
-      newWS.getCell('A3').value = 'tertanggal, ' + dateFull();
+      newWS.getCell('A3').value = 'tertanggal, ' + helpers.dateFull();
       newWS.getCell('A3').alignment = { horizontal:'center'} ;      
       const output = ((val)=>{
         res.writeHead(200,{       
           'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'Content-Disposition': `attachment;filename="${req.user.id}_${todaysdate()}-status_app.xlsx"`
+          'Content-Disposition': `attachment;filename="${req.user.id}_${helpers.todaysdate()}-status_app.xlsx"`
         })
         const download = Buffer.from(val);
         res.end(download);
@@ -155,54 +136,61 @@ module.exports = {
       next(error)
     }
   },
-  /* User operation methods */
-  async getallUser(req, res, next) {
+
+  async putProfil(req, res, next) {
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-        let val = await paginator(User, pages, limits);
-        let vals = [];
-        for(let i of val.results) {// iterate over array from findall
-            let role = await i.getRole()
-            vals.push({// push only some wanted values, zellev
-                id: i.id,
-                username: i.username,
-                email: i.email,
-                status_civitas: i.status_civitas,
-                role: role.role
-            })
-        }
-        const users = await Promise.all(vals);
-        CacheControl.getAllUser(req);
-        res.status(200).json({
-            next:val.next,
-            previous:val.previous,
-            users: users
+      const id_user = req.user.id;
+      const { username, email, status_civitas, keterangan } = req.body;
+      if (!email) {
+        throw createError.BadRequest('email tolong diisi!');
+      } else {
+        let updateVal = {
+          username: username,
+          email: email,
+          status_civitas: status_civitas,
+          keterangan: keterangan,
+          updated_at: fn('NOW')
+        };
+        await models.User.update(updateVal, {
+          where: { id: id_user }
+        });
+        const data = await models.User.findOne({
+          attributes: {exclude: ['password']},
+          where: { id: id_user }
         })
+        CacheControl.putUser();
+        res.status(200).json({
+          success: true,
+          msg: 'data anda berhasil diubah',
+          data: data
+        });
+      }
     } catch (error) {
       next(error);
     }
   },
-
-  async searchUser(req, res, next) {
+  /* User operation methods */
+  async getorsearchUser(req, res, next) {
     try {
-      let { find } = req.query;
-      const validator = userValidator(find);
-      if (validator instanceof createError) throw validator;
+      let { find, page, limit } = req.query;     
       let user = [], temp = [];
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      const pages = parseInt(page) || 1;
+      const limits = parseInt(limit) || config.pagination.pageLimit;
       let opt = {        
         attributes: ['id', 'username', 'email', 'status_civitas', 'id_role'],
-        where: { [Op.or]: validator },
         offset: (pages - 1) * limits,
         limit: limits,
         include: {
-          model: Ref_role, as: 'Role', attributes: ['role']
+          model: models.Ref_role, as: 'Role', attributes: ['role']
         },
         order: [['id', 'ASC']]
       }
-      user = await paginator(User, pages, limits, opt);
+      if(find){
+        const validator = searchsValid.userValidator(find);
+        if (validator instanceof createError) throw validator;
+        opt.where = { [Op.or]: validator }
+      }
+      user = await helpers.paginator(models.User, pages, limits, opt);
       if (user.results.length === 0) {temp.push('No record...')}
       for (let i of user.results){          
         temp.push({
@@ -224,70 +212,32 @@ module.exports = {
     }
   },
 
-  async getUser(req, res, next) {
-    try {
-      const { id_user } = req.params;
-      const user = await getUser({id:id_user});
-      let role;
-      if (user.id_role === 3){
-        const mhs =  await user.getMahasiswa();
-        role = {
-          user_id: user.id,
-          username: user.username,
-          email: user.email,
-          status_civitas: user.aktif,
-          role: 'Mahasiswa',
-          foto_profil: user.foto_profil,
-          keterangan: user.keterangan,
-          created_at: user.created_at,
-          updated_at: user.updated_at,
-          data_mahasiswa: mhs
-        };
-      } else if (user.id_role === 2){
-        const dosen =  await user.getDosen();
-        role = {
-          user_id: user.id,
-          username: user.username,
-          email: user.email,
-          status_civitas: user.aktif,
-          role: 'Dosen',
-          foto_profil: user.foto_profil,
-          keterangan: user.keterangan,
-          created_at: user.created_at,
-          updated_at: user.updated_at,
-          data_dosen: dosen
-        };
-      } else {
-        role = user;
-      }
-      CacheControl.getUser(req);
-      res.status(200).json(role);
-    } catch (error) {
-      next(error);
-    }
-  },
-
   async putUser(req, res, next) {
     try {
-      const { id_user } = req.params;console.log('here')
+      const { id_user } = req.params;
       const { username, email, status_civitas, keterangan } = req.body;
       if (!email) {
-        throw createError.BadRequest('tolong diisi!');
+        throw createError.BadRequest('email tolong diisi!');
       } else {
         let updateVal = {
-            username: username,
-            email: email,
-            status_civitas: status_civitas,
-            keterangan: keterangan,
-            updated_at: fn('NOW')
+          username: username,
+          email: email,
+          status_civitas: status_civitas,
+          keterangan: keterangan,
+          updated_at: fn('NOW')
         };
-        await User.update(updateVal, {
+        await models.User.update(updateVal, {
           where: { id: id_user }
         });
+        const data = await models.User.findOne({
+          attributes: {exclude: ['password']},
+          where: { id: id_user }
+        })
         CacheControl.putUser();
         res.status(200).json({
           success: true,
-          msg: `data user ${id_user} berhasil diubah`
+          msg: `data user ${id_user} berhasil diubah`,
+          data: data
         });
       }
     } catch (error) {
@@ -296,12 +246,15 @@ module.exports = {
   },
 
   async putUserbulk(req, res, next) {
-    try {console.log('here')
+    try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
+      }
+      if (req.file.originalname !== 'Updater.xlsx'){
+        throw createError.BadRequest('File bukan file updater.');
       }
       let updateVal = [];
-      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('User_updater');
@@ -317,7 +270,7 @@ module.exports = {
           })
         }
       });
-      await User.bulkCreate(updateVal, {
+      await models.User.bulkCreate(updateVal, {
         updateOnDuplicate: [
           'id', 'username','email','status_civitas',
           'keterangan', 'updated_at'
@@ -326,7 +279,11 @@ module.exports = {
       CacheControl.putUser();
       res.status(200).json({
         success: true,
-        msg: 'data user berhasil diubah sesuai: ' + req.file.originalname
+        msg: 'data user berhasil diubah sesuai: ' + req.file.originalname,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/users`
+        }
       });
     } catch (error) {
       if(req.file) {
@@ -336,34 +293,18 @@ module.exports = {
     }
   },
 
-  async patchUserPw(req, res, next) {
-    try {
-      const idUser = req.params.id_user;
-      await User.update({
-        password: await hashed(),
-        updated_at: fn('NOW')
-      }, {
-        where: { id: idUser }
-      });
-      res.status(200).json({
-        success: true,
-        msg: `password user ${idUser} berhasil direset`
-      });
-    } catch (error) {
-      next(error);
-    }
-  },
-
   async deleteUser(req, res, next) {
     try {
         const { id_user } = req.params;
-        const getuser = await getUser({id:id_user})
+        const getuser = await models.User.findOne({ 
+          where: { id: id_user  }
+        });
         const currentAdm = req.user.id;
         if (!getuser) { throw createError.NotFound('data user tidak ditemukan.')}
         if (id_user === currentAdm) {
           throw createError.BadRequest('tidak bisa menghapus diri sendiri.')
         }
-        await User.destroy({
+        await models.User.destroy({
           where: {
             id: getuser.id
           }
@@ -371,117 +312,87 @@ module.exports = {
         CacheControl.deleteUser();
         res.status(200).json({
           success: true,
-          msg: 'data berhasil dihapus'
+          msg: 'data berhasil dihapus',
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/users`
+          }
         });
     } catch (error) {
       next(error);
     }
   },
-  /* Profil admin operation methods*/
-  async getProfile(req, res, next) {
+
+  async deleteUserBulk(req, res, next) {
     try {
-      const id = req.user.id;      
-      const admin = await getUser({id: id});
-      const json = admin.toJSON();      
-      delete json.password, delete json.id_role;
-      CacheControl.getmyProfileAdmin(req);
-      res.status(200).json(json);
+        const { id_user } = req.body;
+        const currentAdm = req.user.id;
+        if (id_user.find(v => v === currentAdm)) {
+          throw createError.BadRequest(`id ${currentAdm} adalah id anda, tidak bisa menghapus diri sendiri.`)
+        }
+        await models.User.destroy({
+          where: {
+            id: { [Op.in]: id_user }
+          }
+        });
+        CacheControl.deleteUser();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_user.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/users`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
+  /* Dosen operation methods*/
+  async setDosen (req, res, next) {
+    try {
+        const { NIP, NIDN, NIDK, email, nama_lengkap, nomor_telp} = req.body;
+        const user = await models.User.create({
+          username: await helpers.getUsername(),
+          email: email,
+          status_civitas: 'aktif',
+          password: await helpers.hashed(),
+          id_role: '2',
+          foto_profil: config.auth.defaultProfilePic,
+          keterangan: null,
+          created_at: fn('NOW'),
+          Dosen: {
+              NIP: NIP,
+              NIDN: NIDN,
+              NIDK: NIDK,
+              nama_lengkap: nama_lengkap,
+              nomor_telp: nomor_telp,
+              created_at: fn('NOW')
+            }
+          }, {
+            include: {model: models.Dosen, as: 'Dosen'}
+        });
+      CacheControl.postNewUser();
+      res.status(201).json({
+        success: true,
+        msg: 'dosen berhasil ditambahkan',
+        data: user
+      });
     } catch (error) {
       next(error);
     }
   },
 
-  async putProfile(req, res, next) {
-    try {
-      const user = req.user;
-      const { username, email, status_civitas, keterangan } = req.body;
-      let updateVal = {
-        username: username,
-        email: email,
-        status_civitas: status_civitas,
-        keterangan: keterangan,
-        updated_at: fn('NOW')
-      };
-      await User.update(updateVal, {
-        where: { id: user.id }
-      });
-      CacheControl.putmyProfileAdmin();
-      res.status(200).json({
-        success: true,
-        msg: `profil anda berhasil diubah`
-      });
-    } catch (error) {
-      next(error);
-    }
-  },
-  /* Daftar operation methods*/
-  async daftar (req, res, next) {
-    try {
-        const { NIP, NIDN, NIDK, NIM, email, nama_lengkap, nomor_telp} = req.body;
-        let Role, username = await getUserid();
-        let path = req.baseUrl + req.path;
-        if ( path === '/admin/dosen' ) {
-          await User.create({
-            username: 'User'+' '+ username,
-            email: email,
-            status_civitas: 'aktif',
-            password: await hashed(),
-            id_role: '2',
-            foto_profil: config.auth.defaultProfilePic,
-            keterangan: null,
-            created_at: fn('NOW'),
-            Dosen: {
-                NIP: NIP,
-                NIDN: NIDN,
-                NIDK: NIDK,
-                nama_lengkap: nama_lengkap,
-                nomor_telp: nomor_telp,
-                created_at: fn('NOW')
-              }
-            }, {
-              include: {model: Dosen, as: 'Dosen'}
-          });          
-          Role = 'dosen';
-        } else if ( path === '/admin/mahasiswa' ) {
-          await User.create({
-            username: 'User'+' '+ username,
-            email: email,
-            status_civitas: 'aktif',
-            password: await hashed(),
-            id_role: '3',
-            foto_profil: config.auth.defaultProfilePic,
-            keterangan: null,
-            created_at: fn('NOW'),
-            Mahasiswa: {
-                NIM: NIM,
-                nama_lengkap: nama_lengkap,
-                nomor_telp: nomor_telp,
-                created_at: fn('NOW')
-              }
-            }, {
-              include: {model: Mahasiswa, as: 'Mahasiswa'}
-          });
-        Role = 'Mahasiswa';
-      }
-      CacheControl.postNewUser();
-      res.status(200).json({
-        success: true,
-        msg: `${Role} berhasil ditambahkan`
-      });
-    } catch (error) {
-        next(error);
-    }
-  },
-  /* Dosen operation methods*/
   async getallDosen(req, res, next) {
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-        let val = await paginator(Dosen, pages, limits);
+      const pages = parseInt(req.query.page) || 1;
+      const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
+        let val = await helpers.paginator(models.Dosen, pages, limits);
         let vals = [];
         if(val.results.length !== 0){
           for(let i of val.results) {         
             vals.push({
+              id_user: i.id_user,
               id_dosen: i.id_dosen,
               NIDN: i.NIDN,
               NIDK: i.NIDK,
@@ -503,22 +414,24 @@ module.exports = {
     }
   },
 
-  async searchDosen(req, res, next) {
+  async getorsearchDosen(req, res, next) {
     try {
-      let { find } = req.query;
-      const validator = dosenValidator(find);
-      if (validator instanceof createError) throw validator;
+      let { find, page, limit } = req.query;      
       let dosen = [];
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      const pages = parseInt(page) || 1;
+      const limits = parseInt(limit) || config.pagination.pageLimit;
       let opt = {        
         attributes: ['id_dosen', 'NIDN', 'NIDK', 'nama_lengkap'],
-        where: { [Op.or]: validator },
         offset: (pages - 1) * limits,
         limit: limits,
         order: [['id_dosen', 'ASC']]
       }
-      dosen = await paginator(Dosen, pages, limits, opt);
+      if(find) {
+        const validator = searchsValid.dosenValidator(find);
+        if (validator instanceof createError) throw validator;
+        opt.where = { [Op.or]: validator };
+      }
+      dosen = await helpers.paginator(models.Dosen, pages, limits, opt);
       if (dosen.results.length === 0) {dosen.results.push('No record...')}
       CacheControl.getAllDosen(req);
       res.status(200).json({
@@ -531,24 +444,44 @@ module.exports = {
     }
   },
 
-  async daftarDosenbulk (req, res, next) {
+  async setDosenbulk (req, res, next) {
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
       }
-      const excelFile = pathAll(req.file.filename, 'xlsx');
+      if (req.file.originalname !== 'Adder.xlsx'){
+        throw createError.BadRequest('File bukan file adder.');
+      }
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('User_dosen');
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
           let row = ws.getRow(rowNum).values
-          await User.create({
-            username: 'User'+' '+ await getUserid(),
+          const dataDosenExist = await models.Dosen.findOne({ where: { 
+              [Op.or]: [
+                {NIP: row[1]}, {NIDN: row[2]}, {NIDK: row[3]},
+                {'$User.email$': row[5]}
+              ] 
+            },
+            include: {model: models.User, as: 'User'}
+          });
+          if(dataDosenExist){
+            let err;
+            if(dataDosenExist.NIP === row[1]) err = `NIP ${row[1]}`
+            if(dataDosenExist.NIDN === row[2]) err = `NIDN ${row[2]}`
+            if(dataDosenExist.NIDK === row[3]) err = `NIDK ${row[3]}`
+            if(dataDosenExist.User.email === row[5]) err = `Email ${row[5]}`
+            throw createError.Conflict(`Data dosen dengan ${err} sudah terdaftar.`);
+          }
+          await models.User.create({
+            username: await helpers.getUsername(),
             email: row[5],
             status_civitas: 'aktif',
-            password: await hashed(),
+            password: await helpers.hashed(),
             id_role: '2',
+            foto_profil: config.auth.defaultProfilePic,
             created_at: fn('NOW'),
             Dosen: {
                 NIP: row[1],
@@ -559,14 +492,18 @@ module.exports = {
                 created_at: fn('NOW')
               }
           }, {
-            include: { model: Dosen, as: 'Dosen'}
+            include: { model: models.Dosen, as: 'Dosen'}
           })
         }
       }
       CacheControl.postNewUser();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
+        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/dosen`
+        }
       })
     } catch (error) {
       if(req.file) {
@@ -577,11 +514,11 @@ module.exports = {
   },
 
   async putDosen(req, res, next) {
-    try {
+    try {      
       const { id_dosen } = req.params;
       const { NIP, NIDN, NIDK, nama_lengkap, alamat, nomor_telp } = req.body;
       if (!NIDK) {
-        throw createError.BadRequest('tolong diisi!');
+        throw createError.BadRequest('NIDK tolong diisi!');
       } else {
         let updateVal = {
             NIP: NIP,
@@ -592,13 +529,17 @@ module.exports = {
             nomor_telp: nomor_telp,
             updated_at: fn('NOW')
         };
-        await Dosen.update(updateVal, {
+        await models.Dosen.update(updateVal, {
           where: { id_dosen: id_dosen }
         });
+        const data = await models.Dosen.findOne({
+          where: { id_dosen: id_dosen }
+        })
         CacheControl.putDosen();
         res.status(200).json({
           success: true,
-          msg: 'data dosen berhasil diubah'
+          msg: 'data dosen berhasil diubah',
+          data: data
         });
       }
     } catch (error) {
@@ -609,10 +550,13 @@ module.exports = {
   async putDosenbulk(req, res, next) {
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
+      }
+      if (req.file.originalname !== 'Updater.xlsx'){
+        throw createError.BadRequest('File bukan file updater.');
       }
       let updateVal = [];
-      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Dosen_updater');
@@ -630,7 +574,7 @@ module.exports = {
           })
         }
       });
-      await Dosen.bulkCreate(updateVal, {
+      await models.Dosen.bulkCreate(updateVal, {
         updateOnDuplicate: [
           'id_dosen','NIP','NIDN','NIDK','nama_lengkap',
           'alamat','nomor_telp', 'updated_at'
@@ -639,7 +583,11 @@ module.exports = {
       CacheControl.putDosen();
       res.status(200).json({
         success: true,
-        msg: 'data dosen berhasil diubah sesuai: ' + req.file.originalname
+        msg: 'data dosen berhasil diubah sesuai: ' + req.file.originalname,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/dosen`
+        }
       });
     } catch (error) {
       if(req.file) {
@@ -651,78 +599,104 @@ module.exports = {
 
   async deleteDosen(req, res, next) {
     try {
+        if(req.url == '/dosen/bulk') return next();
         const { id_dosen } = req.params;
-        const getdosen = await Dosen.findOne({
+        const getdosen = await models.Dosen.findOne({
           attributes:['id_dosen'],
-          where: {id_dosen: id_dosen},
-          include: {model: User, as: 'User', attributes: ['id']}
+          where: {id_dosen: id_dosen}
         });
         if (!getdosen) { throw createError.NotFound('data dosen tidak ditemukan.')}
-        await Dosen.destroy({
+        await models.Dosen.destroy({
           where: {
             id_dosen: getdosen.id_dosen
-          }
-        });
-        await User.destroy({
-          where: {
-            id: getdosen.User.id
           }
         });
         CacheControl.deleteDosen();
         res.status(200).json({
           success: true,
-          msg: 'data berhasil dihapus'
+          msg: 'data berhasil dihapus',
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/dosen`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deleteDosenBulk(req, res, next) {
+    try {
+        const { id_dosen } = req.body;
+        await models.Dosen.destroy({
+          where: {
+            id_dosen: { [Op.in]: id_dosen }
+          }
+        });
+        CacheControl.deleteDosen();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_dosen.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/dosen`
+          }
         });
     } catch (error) {
       next(error);
     }
   },
   /* Mahasiswa opearation methods*/
-  async getallMhs(req, res, next) {
+  async setMhs (req, res, next) {
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-        let val = await paginator(Mahasiswa, pages, limits);
-        let vals = [];
-        if(val.results.length !== 0){
-          for(let i of val.results) {// iterate over array from findall          
-            vals.push({// push only some wanted values, zellev
-              id_mhs: i.id_mhs,
-              NIM: i.NIM,
-              nama_lengkap: i.nama_lengkap
-            })
-          }
-        } else {
-          vals.push('No record...')
-        }
-        const mhs = await Promise.all(vals);
-        CacheControl.getAllMhs(req);
-        res.status(200).json({
-            next:val.next,
-            previous:val.previous,
-            mhs: mhs
-        })
+        const { NIM, email, nama_lengkap, nomor_telp} = req.body;
+        const user = await models.User.create({
+          username: await helpers.getUsername(),
+          email: email,
+          status_civitas: 'aktif',
+          password: await helpers.hashed(),
+          id_role: '3',
+          foto_profil: config.auth.defaultProfilePic,
+          keterangan: null,
+          created_at: fn('NOW'),
+          Mahasiswa: {
+              NIM: NIM,
+              nama_lengkap: nama_lengkap,
+              nomor_telp: nomor_telp,
+              created_at: fn('NOW')
+            }
+          }, {
+            include: {model: models.Mahasiswa, as: 'Mahasiswa'}
+        });
+      CacheControl.postNewUser();
+      res.status(201).json({
+        success: true,
+        msg: 'mahasiswa berhasil ditambahkan',
+        data: user
+      });
     } catch (error) {
       next(error);
     }
   },
 
-  async searchMhs(req, res, next) {
+  async getorsearchMhs(req, res, next) {
     try {
-      let { find } = req.query;
-      const validator = mhsValidator(find);
-      if (validator instanceof createError) throw validator;
+      let { find, page, limit } = req.query;      
       let mhs = [];
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      const pages = parseInt(page) || 1;
+      const limits = parseInt(limit) || config.pagination.pageLimit;
       let opt = {        
         attributes: ['id_mhs', 'NIM', 'nama_lengkap'],
-        where: { [Op.or]: validator },
         offset: (pages - 1) * limits,
         limit: limits,
         order: [['id_mhs', 'ASC']]
       }
-      mhs = await paginator(Mahasiswa, pages, limits, opt);
+      if(find) {
+        const validator = searchsValid.mhsValidator(find);
+        if (validator instanceof createError) throw validator;
+        opt.where = { [Op.or]: validator };
+      }
+      mhs = await helpers.paginator(models.Mahasiswa, pages, limits, opt);
       if (mhs.results.length === 0) {mhs.results.push('No record...')}
       CacheControl.getAllMhs(req);
       res.status(200).json({
@@ -735,24 +709,41 @@ module.exports = {
     }
   },
 
-  async daftarMhsbulk (req, res, next) {
+  async setMhsbulk (req, res, next) {
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
       }
-      const excelFile = pathAll(req.file.filename, 'xlsx');
+      if (req.file.originalname !== 'Adder.xlsx'){
+        throw createError.BadRequest('File bukan file adder.');
+      }
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('User_mahasiswa');
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
           let row = ws.getRow(rowNum).values
-          await User.create({
-            username: 'User'+' '+  await getUserid(),
+          const dataMahasiswaExist = await models.Mahasiswa.findOne({ where: { 
+              [Op.or]: [
+                {NIM: row[1]}, {'$User.email$': row[3]}
+              ] 
+            },
+            include: {model: models.User, as: 'User'}
+          });
+          if(dataMahasiswaExist){
+            let err;
+            if(dataMahasiswaExist.NIM === row[1]) err = `NIM ${row[1]}`
+            if(dataMahasiswaExist.User.email === row[5]) err = `Email ${row[5]}`
+            throw createError.Conflict(`Data mahasiswa dengan ${err} sudah terdaftar.`);
+          }
+          await models.User.create({
+            username: await helpers.getUsername(),
             email: row[3],
             status_civitas: 'aktif',
-            password: await hashed(),
+            password: await helpers.hashed(),
             id_role: '3',
+            foto_profil: config.auth.defaultProfilePic,
             created_at: fn('NOW'),
             Mahasiswa: {
                 NIM: row[1],
@@ -761,14 +752,18 @@ module.exports = {
                 created_at: fn('NOW')
               }
           }, {
-            include: {model: Mahasiswa, as: 'Mahasiswa'}
+            include: {model: models.Mahasiswa, as: 'Mahasiswa'}
           });
         }
       }
       CacheControl.postNewUser();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
+        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/mahasiswa`
+        }
       })
     } catch (error) {
       if(req.file) {
@@ -779,11 +774,11 @@ module.exports = {
   },
 
   async putMhs(req, res, next) {
-    try {
+    try {      
       const { id_mhs } = req.params;
       const { NIM, nama_lengkap, alamat, nomor_telp } = req.body;
       if (!NIM) {
-        throw createError.BadRequest('tolong diisi!');
+        throw createError.BadRequest('NIM tolong diisi!');
       } else {
         let updateVal = {
             NIM: NIM,
@@ -792,13 +787,17 @@ module.exports = {
             nomor_telp: nomor_telp,
             updated_at: fn('NOW')
         };
-        await Mahasiswa.update(updateVal, {
+        await models.Mahasiswa.update(updateVal, {
           where: { id_mhs: id_mhs }
         });
+        const data = await models.Mahasiswa.findOne({
+          where: { id_mhs: id_mhs }
+        })
         CacheControl.putMhs();
         res.status(200).json({
           success: true,
-          msg: 'data mahasiswa berhasil diubah'
+          msg: 'data mahasiswa berhasil diubah',
+          data: data
         });
       }
     } catch (error) {
@@ -809,10 +808,13 @@ module.exports = {
   async putMhsbulk(req, res, next) {
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
+      }
+      if (req.file.originalname !== 'Updater.xlsx'){
+        throw createError.BadRequest('File bukan file updater.');
       }
       let updateVal = [];
-      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Mahasiswa_updater');
@@ -828,7 +830,7 @@ module.exports = {
           })
         }
       });
-      await Mahasiswa.bulkCreate(updateVal, {
+      await models.Mahasiswa.bulkCreate(updateVal, {
         updateOnDuplicate: [
           'id_mhs','NIM','nama_lengkap','alamat',
           'nomor_telp', 'updated_at'
@@ -837,7 +839,11 @@ module.exports = {
       CacheControl.putMhs();
       res.status(200).json({
         success: true,
-        msg: 'data mahasiswa berhasil diubah sesuai: ' + req.file.originalname
+        msg: 'data mahasiswa berhasil diubah sesuai: ' + req.file.originalname,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/mahasiswa`
+        }
       });
     } catch (error) {
       if(req.file) {
@@ -849,21 +855,16 @@ module.exports = {
 
   async deleteMhs(req, res, next) {
     try {
+      if(req.url == '/mahasiswa/bulk') return next();
         const { id_mhs } = req.params;
-        const getMhs = await Mahasiswa.findOne({
+        const getMhs = await models.Mahasiswa.findOne({
           attributes:['id_mhs'],
-          where: {id_mhs: id_mhs},
-          include: {model: User, as: 'User', attributes: ['id']}
+          where: {id_mhs: id_mhs}
         });
         if (!getMhs) { throw createError.NotFound('data mahasiswa tidak ditemukan.')}
-        await Mahasiswa.destroy({
+        await models.Mahasiswa.destroy({
           where:{
             id_mhs: getMhs.id_mhs
-          }
-        });
-        await User.destroy({
-          where: {
-            id: getMhs.User.id
           }
         });
         CacheControl.deleteMhs();
@@ -875,53 +876,47 @@ module.exports = {
       next(error);
     }
   },
-  /* Matakuliah operation methods*/
-  async getallMatkul(req, res, next) {
-    try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-        let val = await paginator(Matakuliah, pages, limits);
-        let vals = [];
-        if(val.results.length !== 0){
-          for(let i of val.results) {
-            vals.push({
-              id_matkul: i.id_matkul,
-              kode_matkul: i.kode_matkul,
-              nama_matkul: i.nama_matkul,
-              sks: i.sks
-            })
-          }
-        } else {
-          vals.push('No record...')
-        }
-        const matkul = await Promise.all(vals)
-        CacheControl.getAllMatkul(req);
-        res.status(200).json({
-            next:val.next,
-            previous:val.previous,
-            matkul: matkul
-        })
-    } catch (error) {
-      next(error)
-    }
-  },
 
-  async searchMatkul(req, res, next) {
+  async deleteMhsBulk(req, res, next) {
     try {
-      let { find } = req.query;
-      const validator = matkulValidator(find);
-      if (validator instanceof createError) throw validator;
+        const { id_mhs } = req.body; 
+        await models.Mahasiswa.destroy({
+          where: {
+            id_mhs: { [Op.in]: id_mhs }
+          }
+        });
+        CacheControl.deleteMhs();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_mhs.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/mahasiswa`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
+  /* Matakuliah operation methods*/  
+  async getorsearchMatkul(req, res, next) {
+    try {
+      let { find, page, limit } = req.query;      
       let matkul = [], temp = [];
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      const pages = parseInt(page) || 1;
+      const limits = parseInt(limit) || config.pagination.pageLimit;
       let opt = {        
-        attributes: ['id_matkul','kode_matkul', 'nama_matkul', 'sks'],
-        where: { [Op.or]: validator },
+        attributes: ['id_matkul','kode_matkul', 'nama_matkul', 'sks'],        
         offset: (pages - 1) * limits,
         limit: limits,
         order: [['id_matkul', 'ASC']]
       }
-      matkul = await paginator(Matakuliah, pages, limits, opt);
+      if(find){
+        const validator = searchsValid.matkulValidator(find);
+        if (validator instanceof createError) throw validator;
+        opt.where = { [Op.or]: validator }
+      }
+      matkul = await helpers.paginator(models.Matakuliah, pages, limits, opt);
       if (matkul.results.length === 0) {temp.push('No record...')}
       for (let i of matkul.results){          
         temp.push({
@@ -945,25 +940,26 @@ module.exports = {
   async getMatkul(req, res, next) {
     try {
       const { id_matkul } = req.params;
-      const val = await Matakuliah.findOne({
+      const val = await models.Matakuliah.findOne({
         where: {id_matkul: id_matkul},
         include: [
-          {model: Ref_kel_matkul, as: 'KelMk', attributes: ['kode_kel_mk','kelompok_matakuliah']},
-          {model: Ref_peminatan, as: 'RefPemin', attributes: ['kode_peminatan','peminatan']}
+          {model: models.Ref_kel_matkul, as: 'KelMk', attributes: ['id_kel_mk','kelompok_matakuliah']},
+          {model: models.Ref_peminatan, as: 'RefPemin', attributes: ['id_peminatan','peminatan']}
         ]
       });
       if (!val) { throw createError.NotFound('data matakuliah tidak ditemukan.')}
       const matkul = {
         id_matkul: val.id_matkul,
+        illustrasi_matkul: val.illustrasi_matkul,
         kode_matkul: val.kode_matkul,
-        kelompok_Mk: val.KelMk.kelompok_matakuliah,
+        kelompok_matakuliah: val.KelMk.kelompok_matakuliah,
         Peminatan: val.RefPemin.peminatan,
         nama_matkul: val.nama_matkul,
         sks: val.sks,
         desktripsi: val.desktripsi,
         created_at: val.created_at,
         updated_at: val.updated_at
-      };
+      }
       CacheControl.getMatkul(req);
       res.status(200).json(matkul);
     } catch (error) {
@@ -974,13 +970,13 @@ module.exports = {
   async setMatkul(req, res, next){
     try {
       const { kode_matkul, id_kel_mk, id_peminatan, nama_matkul, sks, deskripsi } = req.body;
-      const illustrasi_matkul = req.file.filename || config.auth.defaultGlobalPic;
-      const matkul = await Matakuliah.findOne({
+      const illustrasi_matkul = req.file?.filename || config.auth.defaultGlobalPic;
+      const matkul = await models.Matakuliah.findOne({
         where: {kode_matkul: kode_matkul}, 
         attributes: ['id_matkul']
       });
       if(matkul) throw createError.Conflict('kode matkul sudah terdaftar!');
-      await Matakuliah.create({
+      const data = await models.Matakuliah.create({
         illustrasi_matkul: illustrasi_matkul,
         kode_matkul: kode_matkul,
         id_kel_mk: id_kel_mk,
@@ -990,9 +986,10 @@ module.exports = {
         deskripsi: deskripsi
       });
       CacheControl.postNewMatkul();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        msg: 'matakuliah berhasil ditambahkan'
+        msg: 'matakuliah berhasil ditambahkan',
+        data: data
       });
     } catch (error) {
       next(error);
@@ -1003,10 +1000,13 @@ module.exports = {
     let picPatharr = [];
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
+      }
+      if (req.file.originalname !== 'Adder.xlsx'){
+        throw createError.BadRequest('File bukan file Adder.');
       }
       let data = [], imgArray = [];
-      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Matakuliah');
@@ -1014,8 +1014,9 @@ module.exports = {
         for (const image of ws.getImages()) {            
           const img = workbook.model.media.find(m => m.index === image.imageId);
           const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
-          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-matkul');
-          const thumbPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-thumbnail');
+          const name = helpers.randomName(7);
+          const picPath = helpers.pathAll(`${row}.${col}.${name}.${img.extension}`, 'img-matkul');
+          const thumbPath = helpers.pathAll(`${row}.${col}.${name}.${img.extension}`, 'img-thumbnail');
           const scaleBy2 = await sharp(img.buffer).metadata()
           .then(({ width, height }) => sharp(img.buffer)
             .resize(Math.round(width * 2), Math.round(height * 2))
@@ -1027,27 +1028,27 @@ module.exports = {
             throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
           }
           fs.appendFileSync(thumbPath, img.buffer);
-          imgArray.push(`${row}.${col}.${img.name}.${img.extension}`);
+          imgArray.push(`${row}.${col}.${name}.${img.extension}`);
           picPatharr.push(picPath);
         }
       }      
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
           let row = ws.getRow(rowNum).values
-          let img = imgArray[rowNum-1];
+          let img = imgArray[rowNum-2];
           if(!img) img = config.auth.defaultGlobalPic;
-          row[4] = row[4] ?? null;
-          row[7] = row[7] ?? null;
           let val = {
-            getKelmk: await Ref_kel_matkul.findOne({
+            getMatkul: await models.Matakuliah.findOne({ where: {kode_matkul: row[2]} }),
+            getKelmk: await models.Ref_kel_matkul.findOne({
               attributes: ['id_kel_mk','kelompok_matakuliah'],
               where: {kelompok_matakuliah: row[3]}
             }),
-            getPemin: await Ref_peminatan.findOne({
+            getPemin: await models.Ref_peminatan.findOne({
               attributes: ['id_peminatan','peminatan'],
-              where: {peminatan: row[4]}
+              where: {peminatan: row[4] ?? null}
             }),
           }
+          if(val.getMatkul) throw createError.Conflict(`matakuliah berkode ${row[2]} sudah terdaftar.`)
           if(!val.getKelmk) throw createError.NotFound(`kelompok matakuliah untuk data ${row[3]} tidak ditemukan.`)
           if(!val.getPemin) throw createError.NotFound(`peminatan untuk data ${row[4]} tidak ditemukan.`)
           data.push({
@@ -1057,15 +1058,19 @@ module.exports = {
             id_peminatan: val.getPemin.id_peminatan,
             nama_matkul: row[5],
             sks: row[6],
-            deskripsi: row[7]
+            deskripsi: row[7] ?? null
           })
         }
-      }
-      await Matakuliah.bulkCreate(data);
+      }     
+      await models.Matakuliah.bulkCreate(data);
       CacheControl.postNewMatkul();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
+        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/matakuliah`
+        }
       })
     } catch (error) {
       if(req.file) {
@@ -1084,7 +1089,7 @@ module.exports = {
     try {
       const { id_matkul } = req.params;
       const { kode_matkul, id_kel_mk, id_peminatan, nama_matkul, sks, deskripsi } = req.body;
-      const mk = await Matakuliah.findByPk(id_matkul);
+      const mk = await models.Matakuliah.findByPk(id_matkul);
       const illustrasi_matkul = req.file.filename || mk.illustrasi_matkul;     
       if (!mk){throw createError.NotFound('data matakuliah tidak ditemukan.')}
       let updateVal = {
@@ -1096,13 +1101,17 @@ module.exports = {
           sks: sks,
           deskripsi: deskripsi
       };
-      await Matakuliah.update(updateVal, {
+      await models.Matakuliah.update(updateVal, {
         where: { id_matkul: id_matkul }
       });
+      const data = await models.Matakuliah.findOne({
+        where: { id_matkul: id_matkul }
+      })
       CacheControl.putMatkul();
       res.status(200).json({
         success: true,
-        msg: 'data matakuliah berhasil diubah'
+        msg: 'data matakuliah berhasil diubah',
+        data: data
       });
     } catch (error) {
       next(error);
@@ -1113,10 +1122,13 @@ module.exports = {
     let picPatharr = [];
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
+      }
+      if (req.file.originalname !== 'Updater.xlsx'){
+        throw createError.BadRequest('File bukan file updater.');
       }
       let updateVal = [], imgArray = [];
-      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Matakuliah_updater');
@@ -1124,8 +1136,9 @@ module.exports = {
         for (const image of ws.getImages()) {            
           const img = workbook.model.media.find(m => m.index === image.imageId);
           const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
-          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-matkul');
-          const thumbPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-thumbnail');
+          const name = helpers.randomName(7);
+          const picPath = helpers.pathAll(`${row}.${col}.${name}.${img.extension}`, 'img-matkul');
+          const thumbPath = helpers.pathAll(`${row}.${col}.${name}.${img.extension}`, 'img-thumbnail');
           const scaleBy2 = await sharp(img.buffer).metadata()
           .then(({ width, height }) => sharp(img.buffer)
             .resize(Math.round(width * 2), Math.round(height * 2))
@@ -1137,24 +1150,22 @@ module.exports = {
             throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
           }
           fs.appendFileSync(thumbPath, img.buffer);
-          imgArray.push(`${row}.${col}.${img.name}.${img.extension}`);
+          imgArray.push(`${row}.${col}.${name}.${img.extension}`);
           picPatharr.push(picPath);
         }
       }
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
           let row = ws.getRow(rowNum).values
-          let img = imgArray[rowNum-1];
-          row[5] = row[5] ?? null;
-          row[8] = row[8] ?? null;
+          let img = imgArray[rowNum-2];
           let val = {
-            getKelmk: await Ref_kel_matkul.findOne({
+            getKelmk: await models.Ref_kel_matkul.findOne({
               attributes: ['id_kel_mk','kelompok_matakuliah'],
               where: {kelompok_matakuliah: row[4]}
             }),
-            getPemin: await Ref_peminatan.findOne({
+            getPemin: await models.Ref_peminatan.findOne({
               attributes: ['id_peminatan','peminatan'],
-              where: {peminatan: row[5]}
+              where: {peminatan: row[5] ?? null}
             }),
           }
           if(!val.getKelmk) throw createError.NotFound(`kelompok matakuliah untuk data ${row[4]} tidak ditemukan.`)
@@ -1167,21 +1178,25 @@ module.exports = {
             id_peminatan: val.getPemin.id_peminatan,
             nama_matkul: row[6],
             sks: row[7],
-            deskripsi: row[8],
+            deskripsi: row[8] ?? null,
             updated_at: fn('NOW')
           }
           if(!img) delete data.illustrasi_matkul;
           updateVal.push(data)
         }
       }
-      await Matakuliah.bulkCreate(updateVal, {
+      await models.Matakuliah.bulkCreate(updateVal, {
         updateOnDuplicate: [ 'id_matkul', 'illustrasi_matkul', 'kode_matkul', 'id_kel_mk',
           'id_peminatan','nama_matkul', 'sks','deskripsi','updated_at' ]
       });
       CacheControl.putMatkul();
       res.status(200).json({
         success: true,
-        msg: 'data matakuliah berhasil diubah sesuai: ' + req.file.originalname
+        msg: 'data matakuliah berhasil diubah sesuai: ' + req.file.originalname,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/matakuliah`
+        }
       });
     } catch (error) {
       if(req.file) {
@@ -1198,13 +1213,14 @@ module.exports = {
 
   async deleteMatkul(req, res, next) {
     try {
+      if(req.url == '/matakuliah/bulk') return next();
         const { id_matkul } = req.params;
-        const getMatkul = await Matakuliah.findOne({
+        const getMatkul = await models.Matakuliah.findOne({
           attributes: ['id_matkul'],
           where: {id_matkul: id_matkul}
         });
         if (!getMatkul) { throw createError.NotFound('data matakuliah tidak ditemukan.')}
-        await Matakuliah.destroy({
+        await models.Matakuliah.destroy({
           where:{
             id_matkul: getMatkul.id_matkul
           }
@@ -1218,14 +1234,36 @@ module.exports = {
       next(error);
     }
   },
+
+  async deleteMatkulBulk(req, res, next) {
+    try {
+        const { id_matkul } = req.body; 
+        await models.Matakuliah.destroy({
+          where: {
+            id_matkul: { [Op.in]: id_matkul }
+          }
+        });
+        CacheControl.deleteMatkul();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_matkul.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/matakuliah`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
   /* Kelas operation methods*/
   async kelasGetMhs(req, res, next){
     try {
       const idKelas = req.params.id_kelas;
-      const kelas = await Kelas.findOne({
+      const kelas = await models.Kelas.findOne({
         attributes: ['id_kelas'],
         where: {id_kelas: idKelas},
-        include: {model: Mahasiswa, as: 'Mahasiswas', through: {attributes:[]}}
+        include: {model: models.Mahasiswa, as: 'Mahasiswas', through: {attributes:[]}}
       });
       const kelasMhs = kelas.Mahasiswas.map((i) => {        
         return {
@@ -1247,24 +1285,34 @@ module.exports = {
   async kelasSetMhs(req, res, next){
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
+      }
+      if (req.file.originalname !== 'Adder.xlsx'){
+        throw createError.BadRequest('File bukan file adder.');
       }
       let data = [];
-      const excelFile = pathAll(req.file.filename, 'xlsx');      
-      const kelas = await Kelas.findByPk(req.params.id_kelas);
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');      
+      const kelas = await models.Kelas.findByPk(req.params.id_kelas);
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Kelas_mahasiswa');
-      ws.eachRow(function(row, rowNumber) {
-        if(rowNumber > 1){
-          data.push(row.values[1])
+      for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
+        if(rowNum > 1){
+          const row = ws.getRow(rowNum).values;
+          const mhs = await models.Mahasiswa.findOne({ where: {NIM: row[1]}, attributes: ['id_mhs'] })
+          if(!mhs) throw createError.NotFound(`Mahasiswa dengan NIM ${row[1]} tidak ditemukan.`)
+          data.push(mhs.id_mhs)
         }
-      });
+      }
       kelas.addMahasiswas(data);
       CacheControl.postNewMhsKelas();
       res.status(200).json({
         success: true,
-        msg: `relasi mahasiswa-kelas berhasil di tambah sesuai ${req.file.originalname}`
+        msg: `relasi mahasiswa-kelas berhasil di tambah sesuai ${req.file.originalname}`,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/kelas/${req.params.id_kelas}/mahasiswa`
+        }
       })
     } catch (error) {
       if(req.file) {
@@ -1277,24 +1325,34 @@ module.exports = {
   async kelasUpdateMhs(req, res, next){
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
+      }
+      if (req.file.originalname !== 'Updater.xlsx'){
+        throw createError.BadRequest('File bukan file updater.');
       }
       let updateVal = [];
-      const excelFile = pathAll(req.file.filename, 'xlsx');   
-      const kelas = await Kelas.findByPk(req.params.id_kelas);
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');   
+      const kelas = await models.Kelas.findByPk(req.params.id_kelas);
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Kelas_mahasiswa');
-      ws.eachRow(function(row, rowNumber) {
-        if(rowNumber > 1){
-          updateVal.push(row.values[1])
+      for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
+        if(rowNum > 1){
+          const row = ws.getRow(rowNum).values;
+          const mhs = await models.Mahasiswa.findOne({ where: {NIM: row[1]}, attributes: ['id_mhs'] })
+          if(!mhs) throw createError.NotFound(`Mahasiswa dengan NIM ${row[1]} tidak ditemukan.`)
+          updateVal.push(mhs.id_mhs)
         }
-      });
+      }
       kelas.setMahasiswas(updateVal);
       CacheControl.putMhsKelas();
       res.status(200).json({
         success: true,
-        msg: `relasi mahasiswa-kelas berhasil di ubah sesuai ${req.file.originalname}`
+        msg: `relasi mahasiswa-kelas berhasil di ubah sesuai ${req.file.originalname}`,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/kelas/${req.params.id_kelas}/mahasiswa`
+        }
       })
     } catch (error) {
       if(req.file) {
@@ -1306,13 +1364,13 @@ module.exports = {
 
   async kelasRemoveMhs(req, res, next){
     try {
-      const nim = req.body.nim;
-      const kelas = await Kelas.findByPk(req.params.id_kelas);      
-      kelas.removeMahasiswas(nim);
+      const id_mhs = req.body.id_mhs;
+      const kelas = await models.Kelas.findByPk(req.params.id_kelas);      
+      kelas.removeMahasiswas(id_mhs);
       CacheControl.deleteMhsKelas();
       res.status(200).json({
         success: true,
-        msg: `relasi mahasiswa ${nim}, dengan kelas ini berhasil dihapus`
+        msg: `relasi mahasiswa ${id_mhs}, dengan kelas ini berhasil dihapus`
       })
     } catch (error) {
       next(error);
@@ -1322,10 +1380,10 @@ module.exports = {
   async kelasGetDosen(req, res, next){
     try {
       const idKelas = req.params.id_kelas;
-      const kelas = await Kelas.findOne({
+      const kelas = await models.Kelas.findOne({
         attributes: ['id_kelas'],
         where: {id_kelas: idKelas},
-        include: {model: Dosen, as: 'Dosens', through: {attributes:[]}}
+        include: {model: models.Dosen, as: 'Dosens', through: {attributes:[]}}
       });
       const kelasDosens = kelas.Dosens.map((i) => {        
         return {
@@ -1351,13 +1409,13 @@ module.exports = {
       const { id_kelas } = req.params
       const { pengampu } = req.body
       let val = [], nidk = [];
-      const kls = await Kelas.findByPk(id_kelas)
+      const kls = await models.Kelas.findByPk(id_kelas)
       if(!pengampu.id_dosen1){
         throw createError.BadRequest('dosen 1 tidak boleh kosong!')
       } else {
-        val[0] = await Dosen.findByPk(pengampu.id_dosen1);
-        !pengampu.id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(pengampu.id_dosen2);
-        !pengampu.id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(pengampu.id_dosen3);
+        val[0] = await models.Dosen.findByPk(pengampu.id_dosen1);
+        !pengampu.id_dosen2 ? val[1] = null : val[1] = await models.Dosen.findByPk(pengampu.id_dosen2);
+        !pengampu.id_dosen3 ? val[2] = null : val[2] = await models.Dosen.findByPk(pengampu.id_dosen3);
         for(let i of val){
           if(i !== null){
             nidk.push(i.NIDK)
@@ -1367,7 +1425,11 @@ module.exports = {
         CacheControl.postNewDosenKelas();
         res.status(200).json({
           success: true,
-          msg: `dosen pengampu ${nidk}, berhasil ditambahkan ke kode seksi ${kls.kode_seksi}`
+          msg: `dosen pengampu ${nidk}, berhasil ditambahkan ke kode seksi ${kls.kode_seksi}`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/kelas/${id_kelas}/dosen`
+          }
         })
       }
     } catch (error) {
@@ -1380,13 +1442,13 @@ module.exports = {
       const { id_kelas } = req.params
       const { pengampu } = req.body
       let val = [], nidk = [], temp= [];
-      const kls = await Kelas.findByPk(id_kelas)      
-      if(!pengampu.noreg_dosen1){
+      const kls = await models.Kelas.findByPk(id_kelas)      
+      if(!pengampu.id_dosen1){
         throw createError.BadRequest('dosen 1 tidak boleh kosong!')
       } else {
-        val[0] = await Dosen.findByPk(pengampu.id_dosen1);
-        !pengampu.id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(pengampu.id_dosen2);
-        !pengampu.id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(pengampu.id_dosen3);
+        val[0] = await models.Dosen.findByPk(pengampu.id_dosen1);
+        !pengampu.id_dosen2 ? val[1] = null : val[1] = await models.Dosen.findByPk(pengampu.id_dosen2);
+        !pengampu.id_dosen3 ? val[2] = null : val[2] = await models.Dosen.findByPk(pengampu.id_dosen3);
         for(let i of val){
           if(i !== null){
             nidk.push(i.NIDK)
@@ -1397,7 +1459,11 @@ module.exports = {
         CacheControl.putDosenKelas();
         res.status(200).json({
           success: true,
-          msg: `dosen pengampu kode seksi ${kls.kode_seksi}, berhasil diubah ke ${nidk}`
+          msg: `dosen pengampu kode seksi ${kls.kode_seksi}, berhasil diubah ke ${nidk}`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/kelas/${id_kelas}/dosen`
+          }
         })
       }
     } catch (error) {
@@ -1407,13 +1473,13 @@ module.exports = {
 
   async kelasRemoveDosen(req, res, next) {
     try {
-      const kelas = await Kelas.findByPk(req.params.id_kelas);
-      const noregDosens = req.body.id_dosen;
-      kelas.removeDosens(noregDosens);
+      const kelas = await models.Kelas.findByPk(req.params.id_kelas);
+      const idDosens = req.body.id_dosen;
+      kelas.removeDosens(idDosens);
       CacheControl.deleteDosenKelas();
       res.status(200).json({
         success: true,
-        msg: `dosen pengampu ${noregDosens}, untuk kode seksi ini berhasil dihapus`
+        msg: `dosen pengampu dengan id ${idDosens}, untuk kode seksi ini berhasil dihapus`
       })
     } catch (error) {
       next(error)
@@ -1422,27 +1488,26 @@ module.exports = {
 
   async setKelas(req, res, next){
     try {
-      let val = [], nidk = [], desc;
+      let val = [], nidk = [];
       const { illustrasi_kelas, kode_seksi, id_dosen1, id_dosen2, id_dosen3, id_matkul, 
               id_semester, hari, jam, deskripsi } = req.body;
-      const objKelas = await Kelas.findOne({
+      const objKelas = await models.Kelas.findOne({
         where: {kode_seksi: kode_seksi}, 
         attributes: ['id_kelas']
       });
       if(objKelas) throw createError.Conflict('kode seksi sudah terdaftar!');
-      val[0] = await Dosen.findByPk(id_dosen1);
-      !id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(id_dosen2);
-      !id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(id_dosen3);
-      deskripsi === "" ? desc = null : desc = deskripsi;
-      const img = illustrasi_kelas || await randomPic() || config.auth.defaultBannerPic;
-      const kelas = await Kelas.create({
+      val[0] = await models.Dosen.findByPk(id_dosen1);
+      !id_dosen2 ? val[1] = null : val[1] = await models.Dosen.findByPk(id_dosen2);
+      !id_dosen3 ? val[2] = null : val[2] = await models.Dosen.findByPk(id_dosen3);
+      const img = illustrasi_kelas || await helpers.randomPic() || config.auth.defaultBannerPic;
+      const kelas = await models.Kelas.create({
         illustrasi_kelas: img,
         kode_seksi: kode_seksi,
         id_matkul: id_matkul,
         id_semester: id_semester,
         hari: hari,
         jam: jam,
-        deskripsi: desc
+        deskripsi: deskripsi ?? null
       })
       if(val.length === 0) {throw createError.BadRequest('dosen 1 tidak boleh kosong!')}
       for(let i of val){
@@ -1452,9 +1517,10 @@ module.exports = {
         }
       }
       CacheControl.postNewKelas();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        msg: 'kelas berhasil ditambahkan'
+        msg: 'kelas berhasil ditambahkan',
+        data: kelas
       });
     } catch (error) {
       next(error);
@@ -1465,9 +1531,12 @@ module.exports = {
     let kdSeksi = [], picPatharr = [];
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
       }
-      const excelFile = pathAll(req.file.filename, 'xlsx');
+      if (req.file.originalname !== 'Adder.xlsx'){
+        throw createError.BadRequest('File bukan file adder.');
+      }
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Kelas');
@@ -1476,8 +1545,9 @@ module.exports = {
         for (const image of ws.getImages()) {            
           const img = workbook.model.media.find(m => m.index === image.imageId);
           const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
-          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-banner');
-          const thumbPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-thumbnail');
+          const name = helpers.randomName(7)
+          const picPath = helpers.pathAll(`${row}.${col}.${name}.${img.extension}`, 'img-banner');
+          const thumbPath = helpers.pathAll(`${row}.${col}.${name}.${img.extension}`, 'img-thumbnail');
           const scaleBy2 = await sharp(img.buffer).metadata()
           .then(({ width, height }) => sharp(img.buffer)
             .resize(Math.round(width * 2), Math.round(height * 2))
@@ -1489,58 +1559,65 @@ module.exports = {
             throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
           }
           fs.appendFileSync(thumbPath, img.buffer);
-          imgArray.push(`${row}.${col}.${img.name}.${img.extension}`);
+          imgArray.push(`${row}.${col}.${name}.${img.extension}`);
           picPatharr.push(picPath);
         }
       }
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
           let row = ws.getRow(rowNum).values;
-          let img = imgArray[rowNum-1];
-          if(!img) img = await randomPic() || config.auth.defaultBannerPic;
-          row[4] = row[4] ?? null;
-          row[7] = row[7] ?? null;
-          let getMk = await Matakuliah.findOne({
+          let img = imgArray[rowNum-2];
+          if(!img) img = await helpers.randomPic() || config.auth.defaultBannerPic;
+          let getKosek = await models.Kelas.findOne({ where: { kode_seksi: row[2] } });
+          let getMk = await models.Matakuliah.findOne({
             attributes: ['id_matkul','nama_matkul'],
             where: {nama_matkul: row[3]}
           });
-          let getSemester = await Ref_semester.findOne({
+          let getSemester = await models.Ref_semester.findOne({
             attributes: ['id_semester','semester'],
-            where: {semester: row[4]}
+            where: {semester: row[4] ?? null}
           });
+          if(getKosek) throw createError.Conflict(`kelas berkode ${row[2]} sudah terdaftar.`);
           if(!getMk) throw createError.NotFound(`matakuliah untuk data ${row[3]} tidak ditemukan.`)
           if(!getSemester) throw createError.NotFound(`semester untuk data ${row[4]} tidak ditemukan.`)                   
-          let kelas = await Kelas.create({
+          let kelas = await models.Kelas.create({
             illustrasi_kelas: img,
             kode_seksi: row[2],
             id_matkul: getMk.id_matkul,
             id_semester: getSemester.id_semester,
             hari: row[5],
             jam: row[6],
-            deskripsi: row[7]
+            deskripsi: row[7] ?? null
           });
-          if(!row[8]) {
-            kdSeksi.push(row[2]);
+          kdSeksi.push(row[2]);
+          if(!row[8]) {            
             throw createError.BadRequest(`dosen 1 pada kelas ${row[2]} tidak boleh kosong!`);            
           }
           for(let i = 0; i < 3; i++){
             if(row[8+i]){
-              let idDosen = await dosen(Dosen, row[8+i]);
+              let idDosen = await dosen(models.Dosen, row[8+i]);
               kelas.addDosen(idDosen.id_dosen)
             }
           }
         }
       }
       CacheControl.postNewKelas();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname
+        msg: 'data berhasil diimport ke DB sesuai: ' + req.file.originalname,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}/v1/kelas`
+        }
       })             
     } catch (error) {
       if(req.file) {
         await unlinkAsync(req.file.path);
         if(kdSeksi.length > 0) {
-          await Kelas.destroy({where: {kode_seksi: kdSeksi}});
+          await models.Kelas.destroy({
+            where: {kode_seksi: kdSeksi},
+            force: true
+          });
         }
         if(picPatharr.length){
           for(let i of picPatharr){
@@ -1554,18 +1631,19 @@ module.exports = {
 
   async putKelas(req, res, next) {
     try {
+      if(req.url == '/kelas/bulk') return next();
       const { id_kelas } = req.params;
       const { illustrasi_kelas, kode_seksi, id_dosen1, id_dosen2, id_dosen3, 
               id_matkul, id_semester, hari, jam, deskripsi } = req.body;
       let val = [], temp = [];
-      const getKelas = await Kelas.findByPk(id_kelas)
+      const getKelas = await models.Kelas.findByPk(id_kelas)
       if (!getKelas){
         throw createError.NotFound('data kelas tidak ditemukan.')
       }
-      val[0] = await Dosen.findByPk(id_dosen1);
-      !id_dosen2 ? val[1] = null : val[1] = await Dosen.findByPk(id_dosen2);
-      !id_dosen3 ? val[2] = null : val[2] = await Dosen.findByPk(id_dosen3);
-      const img = illustrasi_kelas || await randomPic() || config.auth.defaultBannerPic;
+      val[0] = await models.Dosen.findByPk(id_dosen1);
+      !id_dosen2 ? val[1] = null : val[1] = await models.Dosen.findByPk(id_dosen2);
+      !id_dosen3 ? val[2] = null : val[2] = await models.Dosen.findByPk(id_dosen3);
+      const img = illustrasi_kelas || await helpers.randomPic() || config.auth.defaultBannerPic;
       let updateVal = {
           illustrasi_kelas: img,
           kode_seksi: kode_seksi,
@@ -1576,7 +1654,7 @@ module.exports = {
           deskripsi: deskripsi,
           updated_at: fn('NOW')
       };
-      await Kelas.update(updateVal, {
+      await models.Kelas.update(updateVal, {
         where: { id_kelas: id_kelas }
       });
       for(let i of val){
@@ -1585,10 +1663,14 @@ module.exports = {
         }
       }
       getKelas.setDosens(temp);
+      const data = await models.Kelas.findOne({
+        where: { id_kelas: id_kelas }
+      })
       CacheControl.putKelas();
       res.status(200).json({
         success: true,
-        msg: 'data kelas berhasil diubah'
+        msg: 'data kelas berhasil diubah',
+        data: data
       });      
     } catch (error) {
       next(error);
@@ -1599,10 +1681,13 @@ module.exports = {
     let picPatharr = [];
     try {
       if (!req.file) {
-        throw createError.BadRequest('File harus berupa excel/.xlsx!');
+        throw createError.BadRequest('File tidak boleh kosong, harus berupa excel/.xlsx!');
+      }
+      if (req.file.originalname !== 'Updater.xlsx'){
+        throw createError.BadRequest('File bukan file updater.');
       }
       let updateVal = [], imgArray = [];
-      const excelFile = pathAll(req.file.filename, 'xlsx');
+      const excelFile = helpers.pathAll(req.file.filename, 'xlsx');
       const workbook = new ExcelJS.Workbook();
       const wb = await workbook.xlsx.readFile(excelFile);
       const ws = wb.getWorksheet('Kelas_updater');
@@ -1610,8 +1695,9 @@ module.exports = {
         for (const image of ws.getImages()) {            
           const img = workbook.model.media.find(m => m.index === image.imageId);
           const row = image.range.tl.nativeRow, col = image.range.tl.nativeCol;
-          const picPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-banner');
-          const thumbPath = pathAll(`${row}.${col}.${img.name}.${img.extension}`, 'img-thumbnail');
+          const name = helpers.randomName(7)
+          const picPath = helpers.pathAll(`${row}.${col}.${name}.${img.extension}`, 'img-banner');
+          const thumbPath = helpers.pathAll(`${row}.${col}.${name}.${img.extension}`, 'img-thumbnail');
           const scaleBy2 = await sharp(img.buffer).metadata()
           .then(({ width, height }) => sharp(img.buffer)
             .resize(Math.round(width * 2), Math.round(height * 2))
@@ -1623,23 +1709,21 @@ module.exports = {
             throw createError.internal(`upload gambar row: ${row}, col: ${col} gagal`);
           }
           fs.appendFileSync(thumbPath, img.buffer);
-          imgArray.push(`${row}.${col}.${img.name}.${img.extension}`);
+          imgArray.push(`${row}.${col}.${name}.${img.extension}`);
           picPatharr.push(picPath);
         }
       }
       for(let rowNum = 0; rowNum <= ws.actualRowCount; rowNum++){
         if(rowNum > 1){
           let row = ws.getRow(rowNum).values;
-          let img = imgArray[rowNum-1];
-          row[5] = row[5] ?? null;
-          row[8] = row[8] ?? null;
-          let getMk = await Matakuliah.findOne({
+          let img = imgArray[rowNum-2];
+          let getMk = await models.Matakuliah.findOne({
             attributes:['id_matkul','nama_matkul'],
             where: {nama_matkul: row[4]}
           });                  
-          let getSemester = await Ref_semester.findOne({
+          let getSemester = await models.Ref_semester.findOne({
             attributes:['id_semester','semester'],
-            where: {semester: row[5]}
+            where: {semester: row[5] ?? null}
           });
           if(!getMk) throw createError.NotFound(`matakuliah untuk data ${row[4]} tidak ditemukan.`);
           if(!getSemester) throw createError.NotFound(`semester untuk data ${row[5]} tidak ditemukan.`); 
@@ -1651,30 +1735,34 @@ module.exports = {
             id_semester: getSemester.id_semester,
             hari: row[6],
             jam: row[7],
-            deskripsi: row[8],
+            deskripsi: row[8] ?? null,
             updated_at: fn('NOW')
           }
           if(!img) delete data.illustrasi_kelas;
           updateVal.push(data);
           if(row[9]||row[10]||row[11]) {
-            const kelas = await Kelas.findOne({where: {id_kelas: row[1]}});
+            const kelas = await models.Kelas.findOne({where: {id_kelas: row[1]}});
             for(let i = 0; i < 3; i++){
               if(row[9+i]) {
-                let idDosen = await dosen(Dosen, row[9+i]);
+                let idDosen = await dosen(models.Dosen, row[9+i]);
                 kelas.setDosens(idDosen.id_dosen);
               } continue;
             }
           }           
         }
       }
-      await Kelas.bulkCreate(updateVal, {
-        updateOnDuplicate: [ 'id_kelas','kode_seksi','id_matkul','id_semester', 
+      await models.Kelas.bulkCreate(updateVal, {
+        updateOnDuplicate: [ 'id_kelas','illustrasi_kelas','kode_seksi','id_matkul','id_semester', 
           'hari','jam','deskripsi','updated_at' ]
       });
       CacheControl.putKelas();  
       res.status(200).json({
         success: true,
-        msg: 'data kelas berhasil diubah sesuai: ' + req.file.originalname
+        msg: 'data kelas berhasil diubah sesuai: ' + req.file.originalname,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}/v1/kelas`
+        }
       });
     } catch (error) {
       if(req.file) {
@@ -1691,11 +1779,12 @@ module.exports = {
 
   async deleteKelas(req, res, next) {
     try {
+      if(req.url == '/kelas/bulk') return next();
       const { id_kelas } = req.params;
-      const getKelas = await Kelas.findByPk(id_kelas);
+      const getKelas = await models.Kelas.findByPk(id_kelas);
       if (!getKelas) { throw createError.NotFound('data kelas tidak ditemukan.')}
       //console.log(Object.keys(getKelas.__proto__))
-      await Kelas.destroy({
+      await models.Kelas.destroy({
         where:{
           id_kelas: getKelas.id_kelas
         }
@@ -1709,80 +1798,57 @@ module.exports = {
       next(error);
     }
   },
-  /* Kelas-ujian operation method */
-  async kelasGetAllUjian(req, res, next){
+
+  async deleteKelasBulk(req, res, next) {
     try {
-      const idKelas = req.params.id_kelas;
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-      let opt = {
-        where: {'$Kelases.id_kelas$': idKelas},
-        offset: (pages - 1) * limits,
-        limit: limits,
-        include: [
-          {
-            model: Kelas, as: 'Kelases', required: true, attributes: ['id_kelas'],
-            through: { attributes: [] },
-          },
-          {model: Ref_jenis_ujian, as: 'RefJenis'},
-          {model: Paket_soal, as: 'PaketSoals'},
-        ],
-        order: [
-          ['created_at', 'DESC']
-        ]
-      }
-      const ujian = await paginator(Ujian, pages, limits, opt);
-      const vals = ujian.results.map((i) => {
-        return {
-          id_ujian: i.id_ujian,
-          thumbnail_ujian: i.illustrasi_ujian,
-          jenis_ujian: i.RefJenis.jenis_ujian,
-          judul_ujian: i.judul_ujian,
-          tanggal_mulai: i.tanggal_mulai,
-          waktu_mulai: i.waktu_mulai,
-          status_ujian: i.status_ujian,
-          aktif: i.aktif,
-          paket_soal: i.PaketSoals
-        }
-      });
-      if (vals.length === 0) {vals.push('No Record...')}
-      CacheControl.getUjianKelas(req);
-      res.status(200).json({
-          next: ujian.next,
-          previous: ujian.previous,
-          ujian: vals
-      });
+        const { id_kelas } = req.body; 
+        await models.Kelas.destroy({
+          where: {
+            id_kelas: { [Op.in]: id_kelas }
+          }
+        });
+        CacheControl.deleteKelas();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_kelas.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}/v1/kelas`
+          }
+        });
     } catch (error) {
       next(error);
-    }  
-  },
-
-  async kelasSearchUjian(req, res, next){
+    }
+  },  
+  /* Kelas-ujian operation method */
+  async kelasGetorSearchUjian(req, res, next){
     try {
-      let { find } = req.query;
-      const validator = ujianValidator(find);
+      let { find, page, limit } = req.query;      
       const idKelas = req.params.id_kelas;
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      const pages = parseInt(page) || 1;
+      const limits = parseInt(limit) || config.pagination.pageLimit;
       let opt = {
-        where: { [Op.and]: [{'$Kelases.id_kelas$': idKelas}, {
-          [Op.or]: validator}]
-        },
         offset: (pages - 1) * limits,
         limit: limits,
+        subQuery: false,
         include: [
           {
-            model: Kelas, as: 'Kelases', required: true, attributes: ['id_kelas'],
-            through: { attributes: [] },
+            model: models.Kelas, as: 'Kelases', attributes: ['id_kelas'], 
+            where: {id_kelas: idKelas}, through: { attributes: [] },
           },
-          {model: Ref_jenis_ujian, as: 'RefJenis'},
-          {model: Paket_soal, as: 'PaketSoals', attributes: ['kode_paket']},
+          {model: models.Ref_jenis_ujian, as: 'RefJenis'},
+          {model: models.Paket_soal, as: 'PaketSoals', attributes: ['kode_paket']},
         ],
         order: [
           ['created_at', 'DESC']
         ]
       }
-      const ujian = await paginator(Ujian, pages, limits, opt);
+      if(find){
+        const validator = searchsValid.ujianValidator(find, 'admin');
+        if(validator instanceof createError) throw validator;
+        opt.where = { [Op.or]: validator }
+      }
+      const ujian = await helpers.paginator(models.Ujian, pages, limits, opt);
       const vals = ujian.results.map((i) => {
         return {
           id_ujian: i.id_ujian,
@@ -1813,12 +1879,16 @@ module.exports = {
       const { id_kelas } = req.params;
       const { id_ujian } = req.body;
       if(!id_ujian) throw createError.BadRequest('id ujian tidak boleh kosong!');
-      const kelas = await Kelas.findByPk(id_kelas);
+      const kelas = await models.Kelas.findByPk(id_kelas);
       kelas.addUjians(id_ujian);
       CacheControl.postNewUjianKelas();
       res.status(200).json({
         success: true,
-        msg: `kelas berhasil direlasikan dengan ujian, ${id_ujian}`
+        msg: `kelas berhasil direlasikan dengan ujian, ${id_ujian}`,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/kelas/${id_kelas}/ujian`
+        }
       });
     } catch (error) {
       next(error);
@@ -1830,12 +1900,16 @@ module.exports = {
       const { id_kelas } = req.params;
       const { id_ujian } = req.body;
       if(!id_ujian) throw createError.BadRequest('id ujian tidak boleh kosong!');
-      const kelas = await Kelas.findByPk(id_kelas);
+      const kelas = await models.Kelas.findByPk(id_kelas);
       kelas.setUjians(id_ujian);
       CacheControl.putUjianKelas();
       res.status(200).json({
         success: true,
-        msg: `relasi ujian pada kelas ${kelas.kode_seksi}, berhasil diubah`
+        msg: `relasi ujian pada kelas ${kelas.kode_seksi}, berhasil diubah`,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/kelas/${id_kelas}/ujian`
+        }
       });
     } catch (error) {
       next(error);
@@ -1847,7 +1921,7 @@ module.exports = {
       const { id_kelas } = req.params;
       const { id_ujian } = req.body;
       if(!id_ujian) throw createError.BadRequest('id ujian tidak boleh kosong!');
-      const kelas = await Kelas.findByPk(id_kelas);
+      const kelas = await models.Kelas.findByPk(id_kelas);
       kelas.removeUjians(id_ujian);
       CacheControl.deleteUjianKelas();
       res.status(200).json({
@@ -1861,19 +1935,19 @@ module.exports = {
   // ujian operation
   async getAllUjian(req, res, next){
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      const pages = parseInt(req.query.page) || 1;
+      const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
       let opt = {
         offset: (pages - 1) * limits,
         limit: limits,
         include: [
-          {model: Ref_jenis_ujian, as: 'RefJenis'}
+          {model: models.Ref_jenis_ujian, as: 'RefJenis'}
         ],
         order: [
           ['created_at', 'DESC']
         ]
       }
-      const ujian = await paginator(Ujian, pages, limits, opt);
+      const ujian = await helpers.paginator(models.Ujian, pages, limits, opt);
       const vals = ujian.results.map((i) => {
         return {
           id_ujian: i.id_ujian,
@@ -1898,26 +1972,29 @@ module.exports = {
     }
   },
 
-  async searchUjian(req, res, next){
+  async getorsearchUjian(req, res, next){
     try {
-      let { find } = req.query;
-      const validator = ujianValidator(find);
-      if (validator instanceof createError) throw validator;
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      let { find, page, limit } = req.query;     
+      const pages = parseInt(page) || 1;
+      const limits = parseInt(limit) || config.pagination.pageLimit;
       let opt = {
-        where: {[Op.or]: validator},
         offset: (pages - 1) * limits,
         limit: limits,
+        subQuery: false,
         include: [
-          {model: Ref_jenis_ujian, as: 'RefJenis'},
-          {model: Paket_soal, as: 'PaketSoals', attributes: ['kode_paket']},
+          {model: models.Ref_jenis_ujian, as: 'RefJenis'},
+          {model: models.Paket_soal, as: 'PaketSoals', attributes: ['kode_paket']},
         ],
         order: [
           ['created_at', 'DESC']
         ]
       }
-      const ujian = await paginator(Ujian, pages, limits, opt);
+      if(find){
+        const validator = searchsValid.ujianValidator(find, 'admin');
+        if (validator instanceof createError) throw validator;
+        opt.where = {[Op.or]: validator};
+      }
+      const ujian = await helpers.paginator(models.Ujian, pages, limits, opt);
       const vals = ujian.results.map((i) => {
         return {
           id_ujian: i.id_ujian,
@@ -1945,13 +2022,13 @@ module.exports = {
   async getUjian(req, res, next){
     try {
       const { id_ujian } = req.params;
-      const ujian = await Ujian.findOne({
+      const ujian = await models.Ujian.findOne({
         where: {id_ujian: id_ujian},
         include: [
-          {model: Paket_soal, as: 'PaketSoals'},
-          {model: Ref_jenis_ujian, as: 'RefJenis'},
+          {model: models.Paket_soal, as: 'PaketSoals'},
+          {model: models.Ref_jenis_ujian, as: 'RefJenis'},
           {
-            model: Kelas, as: 'Kelases', attributes: ['id_kelas', 'kode_seksi'],
+            model: models.Kelas, as: 'Kelases', attributes: ['id_kelas', 'kode_seksi'],
             through: {attributes: []},
           }
         ]
@@ -1985,9 +2062,10 @@ module.exports = {
 
   async putUjian(req, res, next){
     try {
-      const { tanggal_mulai, waktu_mulai, status, aktif, deskripsi } = req.body;
+      const { illustrasi_ujian, tanggal_mulai, waktu_mulai, status, aktif, deskripsi } = req.body;
       const { id_ujian } = req.params;
       let updateVal = {
+        illustrasi_ujian: illustrasi_ujian || config.auth.defaultBannerPic,
         tanggal_mulai: tanggal_mulai,
         waktu_mulai: waktu_mulai,
         status: status,
@@ -1995,13 +2073,17 @@ module.exports = {
         deskripsi: deskripsi,
         updated_at: fn('NOW')
       };
-      await Ujian.update(updateVal, {
+      await models.Ujian.update(updateVal, {
         where: { id_ujian: id_ujian }
       });
+      const data = await models.Ujian.findOne({
+        where: { id_ujian: id_ujian }
+      })
       CacheControl.putUjian();
       res.status(200).json({
         success: true,
-        msg: `data ujian ${id_ujian} berhasil diubah`
+        msg: `data ujian ${id_ujian} berhasil diubah`,
+        data: data
       })
     } catch (error) {
       next(error);
@@ -2016,13 +2098,18 @@ module.exports = {
         status_ujian: status,
         updated_at: fn('NOW')
       };        
-      await Ujian.update(updateVal, {
+      await models.Ujian.update(updateVal, {
         where: { id_ujian: id_ujian }
       });
+      const data = await models.Ujian.findOne({
+        attributes: ['id_ujian', 'status_ujian', 'updated_at'],
+        where: { id_ujian: id_ujian }
+      })
       CacheControl.patchStatusUjian;
       res.status(200).json({
         success: true,
-        msg: `status ujian berhasil diubah`
+        msg: `status ujian berhasil diubah`,
+        data: data
       })
     } catch (error) {
       next(error);
@@ -2032,7 +2119,7 @@ module.exports = {
   async patchKeaktifanUjian(req, res, next){
     try {
       const { id_ujian } = req.params;      
-      const aktivasi = await Ujian.findOne({
+      const aktivasi = await models.Ujian.findOne({
         attributes:['id_ujian','aktif'],
         where:{id_ujian:id_ujian}
       });
@@ -2050,13 +2137,21 @@ module.exports = {
         };
         keaktifan = 'di non-aktifkan';
       }      
-      await Ujian.update(updateVal, {
+      await models.Ujian.update(updateVal, {
         where: { id_ujian: id_ujian }
       });
+      await models.Paket_soal.update(updateVal, {
+        where: { id_ujian: id_ujian}
+      });
+      const data = await models.Ujian.findOne({
+        attributes: ['id_ujian', 'aktif', 'updated_at'],
+        where: { id_ujian: id_ujian }
+      })
       CacheControl.patchKeaktifanUjian;
       res.status(200).json({
         success: true,
-        msg: `ujian berhasil ${keaktifan}`
+        msg: `ujian berhasil ${keaktifan}`,
+        data: data
       });
     } catch (error) {
       next(error);
@@ -2065,12 +2160,13 @@ module.exports = {
 
   async deleteUjian(req, res, next){
     try {
+      if(req.url == '/ujian/bulk') return next();
       const { id_ujian } = req.params;
-      const ujian = await Ujian.findOne({
+      const ujian = await models.Ujian.findOne({
         where: {id_ujian: id_ujian}
       });
       if (!ujian) { throw createError.NotFound('data ujian tidak ditemukan.')}
-      await Ujian.destroy({
+      await models.Ujian.destroy({
         where:{
           id_ujian: ujian.id_ujian
         }
@@ -2084,18 +2180,58 @@ module.exports = {
       next(error);
     }
   },
+
+  async deleteUjianBulk(req, res, next) {
+    try {
+        const { id_ujian } = req.body; 
+        await models.Ujian.destroy({
+          where: {
+            id_ujian: { [Op.in]: id_ujian }
+          }
+        });
+        CacheControl.deleteUjian();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_ujian.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/ujian`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
   // paket-soal_mhs operation
   async randomizePkSoal(req, res, next){
     try {
       const { id_kelas, id_paket } = req.body;
-      const kelasMhs = await Kelas.findOne({ 
+      const kelasMhs = await models.Kelas.findOne({ 
         where: {id_kelas: id_kelas}, include: {
-          model: Mahasiswa, as: 'Mahasiswas', attributes: ['id_mhs']
+          model: models.Mahasiswa, as: 'Mahasiswas', attributes: ['id_mhs']
         }
       }).then((i) => { 
         return i.Mahasiswas.map(({id_mhs}) => {return id_mhs})
       });
-      shuffleArray(kelasMhs);
+      for(let i of id_paket){
+        const ujianKelas = await models.Paket_soal.findOne({ 
+          attributes: ['id_paket'], 
+          where: {[Op.and]: [
+            {id_paket: i}, {'$Ujian.Kelases.id_kelas$': id_kelas}
+          ]},
+          subQuery: false,
+          include: {
+            model: models.Ujian, as: 'Ujian', attributes: ['id_ujian'],
+            include: {
+              model: models.Kelas, as: 'Kelases', attributes: ['id_kelas']
+            }
+          },
+          raw: true, nest: true
+        });
+        if(!ujianKelas) throw createError.BadRequest(`ujian untuk paket soal ${i} tidak 
+            berelasi dengan kelas ${id_kelas}, atau paket tidak aktif.`);
+      }
+      helpers.shuffleArray(kelasMhs);
       const mapped = kelasMhs.map((i) => {    
         const randomPaket = Math.floor(Math.random() * id_paket.length);
         const kdPaket = id_paket[randomPaket]
@@ -2104,11 +2240,11 @@ module.exports = {
           id_mhs: i
         }
       });
-      await Rel_mahasiswa_paketsoal.bulkCreate(mapped);
+      await models.Rel_mahasiswa_paketsoal.bulkCreate(mapped);
       CacheControl.postNewMhsPkSoal();
       res.status(200).json({
         success: true,
-        msg: `paket-soal berhasil direlasikan dengan mahasiswa pada kelas ${kelasMhs.kode_seksi}`
+        msg: `paket-soal berhasil direlasikan dengan mahasiswa pada kelas ${id_kelas}`
       });
     } catch (error) {
       next(error);
@@ -2126,11 +2262,15 @@ module.exports = {
           id_mhs: i
         }
       });
-      await Rel_mahasiswa_paketsoal.bulkCreate(paketMhs);
+      await models.Rel_mahasiswa_paketsoal.bulkCreate(paketMhs);
       CacheControl.postNewMhsPkSoal();
       res.status(200).json({
         success: true,
-        msg: `paket-soal berhasil direlasikan dengan mahasiswa, ${id_mhs}`
+        msg: `paket-soal ${id_paket} berhasil direlasikan dengan mahasiswa ${id_mhs}`,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/paket-soal/${id_paket}/mahasiswa`
+        }
       });
     } catch (error) {
       next(error);
@@ -2141,20 +2281,25 @@ module.exports = {
     try {
       const { id_paket } = req.params;
       const { id_mhs } = req.body;
-      if(!id_paket) throw createError.BadRequest('id paket tidak boleh kosong!');
+      if(!id_paket) throw createError.BadRequest('id paket tidak boleh kosong!');      
       const paketMhs = id_mhs.map((i) => {
         return {
           id_paket: id_paket,
           id_mhs: i
         }
       });
-      await Rel_mahasiswa_paketsoal.bulkCreate(paketMhs, {
-        updateOnDuplicate: ['id_paket', 'id_mhs']
+      await models.Rel_mahasiswa_paketsoal.destroy({
+        where: {id_paket: id_paket}
       });
+      await models.Rel_mahasiswa_paketsoal.bulkCreate(paketMhs);
       CacheControl.putMhsPkSoal();
       res.status(200).json({
         success: true,
-        msg: `relasi paket-soal mahasiswa berhasil diubah`
+        msg: `relasi paket-soal ${id_paket} dengan mahasiswa berhasil diubah`,
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}${req.baseUrl}/paket-soal/${id_paket}/mahasiswa`
+        }
       });
     } catch (error) {
       next(error);
@@ -2166,13 +2311,13 @@ module.exports = {
       const { id_paket } = req.params;
       const { id_mhs } = req.body;
       if(!id_paket) throw createError.BadRequest('id paket tidak boleh kosong!');
-      await Rel_mahasiswa_paketsoal.destroy({ where:{[Op.and]: [
+      await models.Rel_mahasiswa_paketsoal.destroy({ where:{[Op.and]: [
         {id_paket: id_paket}, {id_mhs: id_mhs}]
       }});
       CacheControl.deleteMhsPkSoal();
       res.status(200).json({
         success: true,
-        msg: `relasi paket-soal mahasiswa berhasil diubah`
+        msg: `relasi paket-soal ${id_paket} dengan ${id_mhs.length} mahasiswa berhasil dihapus`
       });
     } catch (error) {
       next(error);
@@ -2181,12 +2326,13 @@ module.exports = {
 
   async deletePaketSoal(req, res, next){
     try {
+      if(req.url === '/paket-soal/bulk') return next();
       const { id_paket } = req.params;
-      const paketExist = await Paket_soal.findOne({where: {id_paket: id_paket}});
+      const paketExist = await models.Paket_soal.findOne({where: {id_paket: id_paket}});
       if (!paketExist) throw createError.NotFound('data paket-soal tidak ditemukan.')    
       paketExist.setSoals([]);
       paketExist.setMahasiswas([]);
-      await Paket_soal.destroy({
+      await models.Paket_soal.destroy({
         where:{
           id_paket: id_paket
       }});
@@ -2202,12 +2348,30 @@ module.exports = {
   /* Lupa Password operation methods*/
   async getLupapw(req, res, next) {
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-      const vals = await paginator(Lupa_pw, pages, limits);
-      if(vals.results.length === 0) vals.results.push('No record...');
+      const pages = parseInt(req.query.page) || 1;
+      const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
+      let opt = {
+        offset: (pages - 1) * limits,
+        limit: limits,
+        include: { model: models.User, as: 'User' }
+      }
+      const lupaPw = await helpers.paginator(models.Lupa_pw, pages, limits, opt);
+      const vals = lupaPw.results.map((i) => {
+        return {
+          id_reset: i.id_reset_pw,
+          id_user: i.id_user,
+          username: i.User.username,
+          email: i.User.email,
+          status: i.status
+        }
+      });
+      if (vals.length === 0) {vals.push('No Record...')}
       CacheControl.getLupapw(req);
-      res.status(200).json(vals);
+      res.status(200).json({
+          next: lupaPw.next,
+          previous: lupaPw.previous,
+          lupa_pw: vals
+      });      
     } catch (error) {
       next(error);
     }
@@ -2215,23 +2379,63 @@ module.exports = {
 
   async resetPw(req, res, next) {
     try {
-        const { id_reset } = req.params;
-        const getlupapw = await Lupa_pw.findByPk(id_reset);
-        const getUserdata = await getUser({username:getlupapw.username});
-        let updateVal = { password: await hashed(), updated_at: fn('NOW')};
-        await User.update(updateVal, {
-          where: { id: getUserdata.id }
+      if(req.url == `/user/password/bulk`) return next('route');
+        const { id_user } = req.params;
+        const getlupapw = await models.Lupa_pw.findOne({
+          where: {id_user: id_user}
         });
-        await Lupa_pw.update({status: 'sudah'}, {
-          where:{
-            id_reset_pw: getlupapw.id_reset_pw
-          }
+        let updateVal = { password: await helpers.hashed(), updated_at: fn('NOW') };
+        await models.User.update(updateVal, {
+          where: { id: id_user }
         });
-        CacheControl.resetPw;
-        res.status(204).json({
+        if(getlupapw){
+          await models.Lupa_pw.update({status: 'sudah'}, {
+            where:{
+              id_reset_pw: getlupapw.id_reset_pw
+            }
+          });
+        }
+        CacheControl.resetPw();
+        res.status(200).json({
           success: true,
-          msg: 'password '+getUserdata.username+' menjadi default, '
-                +config.auth.defaultPass
+          msg: `password berhasil dereset untuk user dengan id ${id_user}`
+        });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async resetPwBulk(req, res, next) {
+    try {
+        const { id_user } = req.body;
+        let updateVal = [];
+        const getlupapw = await models.Lupa_pw.findAll({
+          where: {id_user: {[Op.in]: id_user}},
+          raw: true
+        });
+        for(let i of id_user){
+          updateVal.push({
+            id: i,
+            password: await helpers.hashed(), 
+            updated_at: fn('NOW')
+          })
+        }
+        await models.User.bulkCreate(updateVal, {
+          updateOnDuplicate: ['id', 'password', 'updated_at']
+        });
+        if(getlupapw.length){
+          getlupapw.forEach((i) => {
+            models.Lupa_pw.update({status: 'sudah'}, {
+              where:{
+                id_reset_pw: i.id_reset_pw
+              }
+            });
+          });
+        }
+        CacheControl.resetPw();
+        res.status(200).json({
+          success: true,
+          msg: `password ${id_user.length} user berhasil direset.`
         });
     } catch (error) {
       next(error);
@@ -2240,10 +2444,12 @@ module.exports = {
 
   async deleteLupapw(req, res, next) {
     try {
+      if(req.url == '/lupa-pw/bulk') return next();
       const { id_reset } = req.params;
-      const getlupapw = await Lupa_pw.findByPk(id_reset)
-      if (!getlupapw) { throw createError.NotFound('data lupa-pass tidak ditemukan.')}
-      await Lupa_pw.destroy({
+      const getlupapw = await models.Lupa_pw.findByPk(id_reset)
+      if (!getlupapw) throw createError.NotFound('data lupa-pass tidak ditemukan.');
+      if(getlupapw.status === 'belum') throw createError.BadRequest('password user belum direset.');
+      await models.Lupa_pw.destroy({
         where:{
           id_reset_pw: getlupapw.id_reset_pw
         }
@@ -2257,12 +2463,34 @@ module.exports = {
       next(error);
     }
   },
+
+  async deleteLupaPwBulk(req, res, next) {
+    try {
+        const { id_reset } = req.body; 
+        await models.Lupa_pw.destroy({
+          where: {
+            id_reset_pw: { [Op.in]: id_reset }
+          }
+        });
+        CacheControl.deleteLupapw();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_reset.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/lupa-pw`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
   /* Pengumuman operation methods*/
   async getPengumumanAll(req, res, next) {
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-      const vals = await paginator(Pengumuman, pages, limits);
+      const pages = parseInt(req.query.page) || 1;
+      const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
+      const vals = await helpers.paginator(models.Pengumuman, pages, limits, {});
       if(vals.results.length === 0) vals.results.push('No record...');
       CacheControl.getAllPengumuman(req);
       res.status(200).json({
@@ -2278,7 +2506,7 @@ module.exports = {
   async getPengumuman(req, res, next) {
     try {
       const { id_pengumuman } = req.params;
-      const val = await Pengumuman.findByPk(id_pengumuman);
+      const val = await models.Pengumuman.findByPk(id_pengumuman);
       if(!val) throw createError.NotFound('data pengumuman tidak ditemukan.');
       CacheControl.getPengumuman(req);
       res.status(200).json(val);
@@ -2290,23 +2518,28 @@ module.exports = {
   async setPengumuman(req, res, next) {
     try {
       const { pengumuman, status } = req.body;
-      const getPengummn = await Pengumuman.findOne({
+      const getPengummn = await models.Pengumuman.findOne({
         attributes:['pengumuman'],
-        where:{pengumuman:pengumuman}
+        where: {pengumuman: pengumuman}
       });
       if (getPengummn) {
         throw createError.Conflict('Pengumuman sudah terdaftar');
       } else if (!pengumuman) {
-        throw createError.BadRequest('tolong diisi!');
+        throw createError.BadRequest('isi pengumuman tolong diisi!');
       } else {
-        await Pengumuman.create({
+        const statusUjian = [ 'tampil', 'tidak_tampil' ]
+        if(!statusUjian.some(v => status.includes(v))) {
+          throw createError.BadRequest('status pengumuman tidak valid!, harus berupa "tampil" atau "tidak_tampil"');
+        }
+        const data = await models.Pengumuman.create({
           pengumuman: pengumuman,
           status: status
         });
         CacheControl.postNewPengumuman();
-        res.status(200).json({
+        res.status(201).json({
           success: true,
-          msg: 'pengumuman berhasil ditambahkan'
+          msg: 'pengumuman berhasil ditambahkan',
+          data: data
         });
       }
     } catch (error) {
@@ -2319,19 +2552,28 @@ module.exports = {
       const { id_pengumuman } = req.params;
       const { pengumuman, status } = req.body;
       if (!pengumuman) {
-        throw createError.BadRequest('tolong diisi!');
+        throw createError.BadRequest('isi pengumuman tolong diisi!');
       } else {
+        const whitelist = [ 'tampil', 'tidak_tampil' ];
+        if(!whitelist.includes(status)) {
+          throw createError.BadRequest('status pengumuman tidak valid!, harus berupa "tampil" atau "tidak_tampil"');
+        }
         let updateVal = {
-            pengumuman: pengumuman,
-            status: status
+          pengumuman: pengumuman,
+          status: status,
+          updated_at: fn('NOW')
         };
-        await Pengumuman.update(updateVal, {
+        await models.Pengumuman.update(updateVal, {
           where: { id_pengumuman: id_pengumuman }
         });
+        const data = await models.Pengumuman.findOne({
+          where: { id_pengumuman: id_pengumuman }
+        })
         CacheControl.putPengumuman();
         res.status(200).json({
           success: true,
-          msg: 'data pengumuman berhasil diubah'
+          msg: 'data pengumuman berhasil diubah',
+          data: data
         });
       }
     } catch (error) {
@@ -2341,10 +2583,11 @@ module.exports = {
 
   async deletePengumuman(req, res, next) {
     try {
+      if(req.url == '/pengumuman/bulk') return next();
         const { id_pengumuman } = req.params;
-        const getpengumuman = await Pengumuman.findByPk(id_pengumuman);
+        const getpengumuman = await models.Pengumuman.findByPk(id_pengumuman);
         if (!getpengumuman) { throw createError.NotFound('data pengumuman tidak ditemukan.')}
-        await Pengumuman.destroy({
+        await models.Pengumuman.destroy({
           where:{
             id_pengumuman: getpengumuman.id_pengumuman
           }
@@ -2358,12 +2601,34 @@ module.exports = {
       next(error);
     }
   },
+
+  async deletePengumumanBulk(req, res, next) {
+    try {
+        const { id_pengumuman } = req.body; 
+        await models.Pengumuman.destroy({
+          where: {
+            id_pengumuman: { [Op.in]: id_pengumuman }
+          }
+        });
+        CacheControl.deletePengumuman();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_pengumuman.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/pengumuman`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
   /* Captcha operation methods*/
   async getCaptchaAll(req, res, next) {
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-      const vals = await paginator(Captcha, pages, limits);
+      const pages = parseInt(req.query.page) || 1;
+      const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
+      const vals = await helpers.paginator(models.Captcha, pages, limits, {});
       if(vals.results.length === 0) vals.results.push('No record...');
       CacheControl.getAllCaptcha(req);
       res.status(200).json({
@@ -2379,7 +2644,7 @@ module.exports = {
   async getCaptcha (req, res, next) {
     try {
       const idCaptcha = req.params.id_captcha;
-      const captcha = await Captcha.findByPk(idCaptcha);
+      const captcha = await models.Captcha.findByPk(idCaptcha);
       CacheControl.getCaptcha;
       res.status(200).json(captcha);
     } catch (error) {
@@ -2390,22 +2655,23 @@ module.exports = {
   async setCaptcha (req, res, next) {
     try {
       const { pertanyaan, jawaban } = req.body;
-      const getCaptcha = await Captcha.findOne({where:{[Op.or]: [
+      const getCaptcha = await models.Captcha.findOne({where:{[Op.or]: [
         {pertanyaan:pertanyaan}, {jawaban:jawaban}]
       }});
       if (getCaptcha) {
         throw createError.Conflict('Pertanyaan dan/atau jawaban sudah terdaftar');
       } else if (!pertanyaan&&!jawaban) {
-        throw createError.BadRequest('tolong diisi!');
+        throw createError.BadRequest('pertanyaan/jawaban tolong diisi!');
       } else {
-        await Captcha.create({
+        const data = await models.Captcha.create({
           pertanyaan: pertanyaan,
           jawaban: jawaban
         });
         CacheControl.postNewCaptcha();
-        res.status(200).json({
+        res.status(201).json({
           success: true,
-          msg: 'captcha berhasil ditambahkan'
+          msg: 'captcha berhasil ditambahkan',
+          data: data
         });
       }
     } catch (error) {
@@ -2418,18 +2684,23 @@ module.exports = {
       const idCaptcha = req.params.id_captcha;
       const { pertanyaan, jawaban } = req.body;
       if (!pertanyaan&&!jawaban) {
-        throw createError.BadRequest('tolong diisi!');
+        throw createError.BadRequest('pertanyaan/jawaban tolong diisi!');
       } else {
-        await Captcha.update({
+        await models.Captcha.update({
           pertanyaan: pertanyaan,
-          jawaban: jawaban
+          jawaban: jawaban,
+          updated_at: fn('NOW')
         }, {
           where: { id_captcha: idCaptcha }
         });
+        const data = await models.Captcha.findOne({
+          where: { id_captcha: idCaptcha }
+        })
         CacheControl.putCaptcha();
         res.status(200).json({
           success: true,
-          msg: 'captcha berhasil diubah'
+          msg: 'captcha berhasil diubah',
+          data: data
         });
       }
     } catch (error) {
@@ -2439,10 +2710,11 @@ module.exports = {
 
   async deleteCaptcha(req, res, next) {
     try {
+      if(req.url == '/captcha/bulk') return next();
       const { id_captcha } = req.params;
-      const getCpt = await Captcha.findByPk(id_captcha);
+      const getCpt = await models.Captcha.findByPk(id_captcha);
       if (!getCpt) { throw createError.NotFound('data captcha tidak ditemukan.')}
-      await Captcha.destroy({
+      await models.Captcha.destroy({
         where:{
           id_captcha: getCpt.id_captcha
       }});
@@ -2455,12 +2727,34 @@ module.exports = {
       next(error);
     }
   },
+
+  async deleteCaptchaBulk(req, res, next) {
+    try {
+        const { id_captcha } = req.body; 
+        await models.Captcha.destroy({
+          where: {
+            id_captcha: { [Op.in]: id_captcha }
+          }
+        });
+        CacheControl.deleteCaptcha();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_captcha.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/captcha`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
   /* Semester operation methods*/
   async getSmstrAll(req, res, next) {
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-      const vals = await paginator(Ref_semester, pages, limits);
+      const pages = parseInt(req.query.page) || 1;
+      const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
+      const vals = await helpers.paginator(models.Ref_semester, pages, limits, {});
       CacheControl.getAllSemester(req);
       res.status(200).json(vals);
     } catch (error) {
@@ -2471,17 +2765,18 @@ module.exports = {
   async setSemester (req, res, next) {
     try {
       const { semester } = req.body;
-      const getSemester = await Ref_semester.findOne({where:{semester:semester}});
+      const getSemester = await models.Ref_semester.findOne({where:{semester:semester}});
       if (getSemester) {
         throw createError.Conflict('Semester sudah terdaftar');
       } else {
-        await Ref_semester.create({
+        const data = await models.Ref_semester.create({
           semester:semester
         });
         CacheControl.postNewSemester();
-        res.status(200).json({
+        res.status(201).json({
           success: true,
-          msg: 'semester berhasil ditambahkan'
+          msg: 'semester berhasil ditambahkan',
+          data: data
         });
       }
     } catch (error) {
@@ -2494,18 +2789,23 @@ module.exports = {
       const { id_semester } = req.params;
       const { semester } = req.body;
       if (!semester) {
-        throw createError.BadRequest('tolong diisi!');
+        throw createError.BadRequest('semestertolong diisi!');
       } else {
         let updateVal = {
-            semester: semester,
+          semester: semester,
+          updated_at: fn('NOW')
         };
-        await Ref_semester.update(updateVal, {
+        await models.Ref_semester.update(updateVal, {
           where: { id_semester: id_semester }
         });
         CacheControl.putSemester();
         res.status(200).json({
           success: true,
-          msg: 'data semester berhasil diubah'
+          msg: 'data semester berhasil diubah',
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/semester`
+          }
         });
       }
     } catch (error) {
@@ -2515,12 +2815,13 @@ module.exports = {
 
   async deleteSemester(req, res, next) {
     try {
+      if(req.url == '/semester/bulk') return next();
         const { id_semester } = req.params;
-        const getSms = await Ref_semester.findOne({
+        const getSms = await models.Ref_semester.findOne({
           where: {id_semester: id_semester}
         });
         if (!getSms) { throw createError.NotFound('data semester tidak ditemukan.')}
-        await Ref_semester.destroy({
+        await models.Ref_semester.destroy({
           where:{
             id_semester: getSms.id_semester
           }
@@ -2534,12 +2835,34 @@ module.exports = {
       next(error);
     }
   },
+
+  async deleteSemesterBulk(req, res, next) {
+    try {
+        const { id_semester } = req.body; 
+        await models.Ref_semester.destroy({
+          where: {
+            id_semester: { [Op.in]: id_semester }
+          }
+        });
+        CacheControl.deleteSemester();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_semester.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/pengumuman`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
   /* Notifikasi operation methods*/
   async getNotifikasiAll(req, res, next) {
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-      const vals = await paginator(Notifikasi, pages, limits);
+      const pages = parseInt(req.query.page) || 1;
+      const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
+      const vals = await helpers.paginator(models.Notifikasi, pages, limits, {});
       if(vals.results.length === 0) vals.results.push('No record...');
       CacheControl.getAllNotifikasi(req);
       res.status(200).json({
@@ -2555,7 +2878,7 @@ module.exports = {
   async getNotifikasi(req, res, next) {
     try {
       const { id_notif } = req.params;
-      const val = await Notifikasi.findByPk(id_notif);
+      const val = await models.Notifikasi.findByPk(id_notif);
       if(!val) throw createError.NotFound('data notifikasi tidak ditemukan.');
       CacheControl.getNotifikasiAdm(req);
       res.status(200).json(val)
@@ -2567,13 +2890,13 @@ module.exports = {
   async setNotifikasi(req, res, next) {
     try {
       const { id_penerima, pesan } = req.body;
-      const userPenerima = await User.findOne({
+      const userPenerima = await models.User.findOne({
         attributes: ['id'],
         where: { id: id_penerima }
       });
-      if(!userPenerima) throw createError.NotFound('user tidak ditemukan.');
+      if(!userPenerima) throw createError.NotFound(`user dengan id ${id_penerima} tidak ditemukan.`);
       const admin = await req.user;
-      await Notifikasi.create({
+      const data = await models.Notifikasi.create({
         id_pengirim: admin.id,
         id_penerima: userPenerima.id,
         notifikasi: pesan,
@@ -2582,7 +2905,8 @@ module.exports = {
       CacheControl.postNewNotifikasi();
       res.status(200).json({
         success: true,
-        msg: 'notifikasi berhasil dikirim.'
+        msg: 'notifikasi berhasil dikirim.',
+        data: data
       });
     } catch (error) {
       next(error);
@@ -2593,7 +2917,7 @@ module.exports = {
     try {
       const { id_penerima, pesan } = req.body;
       const idNotif = req.params.id_notif;
-      const userPenerima = await User.findOne({
+      const userPenerima = await models.User.findOne({
         attributes: ['id'],
         where: { id: id_penerima }
       });
@@ -2605,13 +2929,17 @@ module.exports = {
         notifikasi: pesan,
         updated_at: fn('NOW')
       }
-      await Notifikasi.update( updateVal, {
+      await models.Notifikasi.update( updateVal, {
         where: {id_notif: idNotif}
       });
+      const data = await models.Notifikasi.findOne({
+        where: { id_notif: idNotif }
+      })
       CacheControl.putNotifikasi();
       res.status(200).json({
         success: true,
-        msg: 'notifikasi berhasil diubah'
+        msg: 'notifikasi berhasil diubah',
+        data: data
       });
     } catch (error) {
       next(error);
@@ -2620,10 +2948,11 @@ module.exports = {
 
   async deleteNotifikasi(req, res, next) {
     try {
+      if(req.url == '/notifikasi/bulk') return next();
       const idNotif = req.params.id_notif;
-      const getNotif = await Notifikasi.findByPk(idNotif);
+      const getNotif = await models.Notifikasi.findByPk(idNotif);
       if (!getNotif) { throw createError.NotFound('data notifikasi tidak ditemukan.')}
-      await Notifikasi.destroy({
+      await models.Notifikasi.destroy({
         where: {id_notif: idNotif}
       });
       CacheControl.deleteNotifikasi();
@@ -2636,23 +2965,49 @@ module.exports = {
     }
   },
 
+  async deleteNotifikasiBulk(req, res, next) {
+    try {
+        const { id_notif } = req.body; 
+        await models.Notifikasi.destroy({
+          where: {
+            id_notif: { [Op.in]: id_notif }
+          }
+        });
+        CacheControl.deleteNotifikasi();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_notif.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}${req.baseUrl}/notifikasi`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
+
   async setIllustrasi(req, res, next) {
     try {      
       const nama_illustrasi = req.file.filename;
-      await Ref_illustrasi.create({
+      await models.Ref_illustrasi.create({
         nama_illustrasi: nama_illustrasi
       });
-      const img = await sharp(fs.readFileSync(pathAll(nama_illustrasi, 'img-banner')))
-      .resize(150, 100)
-      .toFile(pathAll(nama_illustrasi, 'img-thumbnail'))
+      const img = await sharp(fs.readFileSync(helpers.pathAll(nama_illustrasi, 'img-banner')))
+      .resize(100, 100)
+      .toFile(helpers.pathAll(nama_illustrasi, 'img-thumbnail'))
       if(img instanceof Error) {
         console.error(img);
         throw createError.internal('gagal mengupload gambar');
       }
       CacheControl.postNewIllustrasi();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        msg: 'banner dan thumbnail berhasil ditambahkan'
+        msg: 'banner dan thumbnail berhasil ditambahkan',
+        data: {
+          method: 'GET',
+          href: `${req.protocol}://${req.get('host')}/v1/illustrasi`
+        }
       });
     } catch (error) {
       if(req.file) {
@@ -2664,14 +3019,13 @@ module.exports = {
 
   async deleteIllustrasi(req, res, next) {
     try {
+      if(req.url == '/illustrasi/bulk') return next();
       const idIllustrasi = req.params.id_illustrasi;
-      const getIllustrasi = await Ref_illustrasi.findByPk(idIllustrasi);
-      if (!getIllustrasi) { throw createError.NotFound('data banner tidak ditemukan.')}
-      await Ref_illustrasi.destroy({
+      const getIllustrasi = await models.Ref_illustrasi.findByPk(idIllustrasi);
+      if (!getIllustrasi) { throw createError.NotFound('data illustrasi tidak ditemukan.')}
+      await models.Ref_illustrasi.destroy({
         where: {id_illustrasi: idIllustrasi}
       });
-      await unlinkAsync(pathAll(getIllustrasi.nama_illustrasi, 'img-banner'));
-      await unlinkAsync(pathAll(getIllustrasi.nama_illustrasi, 'img-thumbnail'));
       CacheControl.deleteIllustrasi();
       res.status(200).json({
         success: true,
@@ -2681,6 +3035,28 @@ module.exports = {
       next(error);
     }
   },
+
+  async deleteIllustrasiBulk(req, res, next) {
+    try {
+        const { id_illustrasi } = req.body; 
+        await models.Ref_illustrasi.destroy({
+          where: {
+            id_illustrasi: { [Op.in]: id_illustrasi }
+          }
+        });
+        CacheControl.deleteIllustrasi();
+        res.status(200).json({
+          success: true,
+          msg: `sebanyak ${id_illustrasi.length} data berhasil dihapus`,
+          data: {
+            method: 'GET',
+            href: `${req.protocol}://${req.get('host')}/v1/illustrasi`
+          }
+        });
+    } catch (error) {
+      next(error);
+    }
+  },  
 
   async getAllModelName(req, res, next) {
     try {
@@ -2697,7 +3073,6 @@ module.exports = {
          }
         }
       });
-      CacheControl.getAllModelName();
       res.status(200).json(data);
     } catch (error) {
       next(error);
@@ -2708,9 +3083,10 @@ module.exports = {
     try {
       const modelName = req.params.nama_tabel;
       const data = await models[modelName].findAll({ 
-        where: { deleted_at: { [Op.ne]: null } } 
+        where: { deleted_at: { [Op.ne]: null } },
+        paranoid: false
       });
-      CacheControl.getSoftDeleted();
+      CacheControl.getAllSoftDeleted(req);
       res.status(200).json(data);
     } catch (error) {
       next(error);
@@ -2720,14 +3096,22 @@ module.exports = {
   async putSoftDeleted(req, res, next) {
     try {
       const modelName = req.params.nama_tabel;
-      const arrId = req.body.id;
-      const prop = await getModelPK(modelName);
-      if(prop instanceof createError) throw prop;
-      await modelName.restore({ where: {[prop]: {[Op.in]: arrId}} });
+      let arrId = req.body.id, msg;
+      if(arrId){        
+        const prop = await helpers.getModelPK(modelName);
+        if(prop instanceof createError) throw prop;
+        await models[modelName].restore({ 
+          where: {[prop]: {[Op.in]: arrId}} 
+        });
+        msg = `sebanyak ${arrId.length} data berhasil dipulihkan pada tabel ${modelName}`
+      } else {
+        await models[modelName].restore();
+        msg = `semua data soft-deleted berhasil dipulihkan pada tabel ${modelName}`
+      }      
       CacheControl.putSoftDeleted();
       res.status(200).json({
         success: true,
-        msg: `sebanyak ${arrId.length} data berhasil dipulihkan pada tabel ${modelName}`
+        msg: msg
       });
     } catch (error) {
       next(error);
@@ -2737,17 +3121,46 @@ module.exports = {
   async permanentDelete(req, res, next) {
     try {
       const modelName = req.params.nama_tabel;
-      const arrId = req.body.id;
-      const prop = await getModelPK(modelName);
-      if(prop instanceof createError) throw prop;
-      await modelName.destroy({
-        where: {[prop]: {[Op.in]: arrId}},
-        force: true
-      });
+      let arrId = req.body.id, msg;
+      if(arrId){
+        const prop = await helpers.getModelPK(modelName);
+        if(prop instanceof createError) throw prop;
+        await models[modelName].destroy({
+          where: {
+            [Op.and]: [{deleted_at: {[Op.ne]: null}}, {[prop]: {[Op.in]: arrId}}]
+          },
+          force: true
+        });
+        if(modelName === 'Ref_illustrasi'){
+          for(let i of arrId) {
+            const getIllustrasi = await models[modelName].findByPk(i);
+            if (!getIllustrasi) { throw createError.NotFound('data illustrasi tidak ditemukan.')}
+            await unlinkAsync(helpers.pathAll(getIllustrasi.nama_illustrasi, 'img-banner'));
+            await unlinkAsync(helpers.pathAll(getIllustrasi.nama_illustrasi, 'img-thumbnail'));
+          }
+        }
+        msg = `sebanyak ${arrId.length} data berhasil dihapus permanen pada tabel ${modelName}`
+      } else {
+        if(modelName === 'Ref_illustrasi'){
+          const getIllustrasi = await models[modelName].findAll({
+            where: {deleted_at: {[Op.ne]: null}},
+            raw: true
+          }).then((i) => { i.map(({nama_illustrasi}) => { return nama_illustrasi }) });
+          for(let i of getIllustrasi){
+            await unlinkAsync(helpers.pathAll(i, 'img-banner'));
+            await unlinkAsync(helpers.pathAll(i, 'img-thumbnail'));
+          }
+        }
+        await models[modelName].destroy({
+          where: {deleted_at: {[Op.ne]: null}},
+          force: true
+        });
+        msg = `semua data soft-deleted berhasil dihapus permanen pada tabel ${modelName}`
+      }
       CacheControl.permaDelete();
       res.status(200).json({
         success: true,
-        msg: `sebanyak ${arrId.length} data berhasil dihapus permament pada tabel ${modelName}`
+        msg: msg
       });
     } catch (error) {
       next(error);

@@ -1,19 +1,14 @@
-const { Captcha, User, Lupa_pw, Token_history, Client } = require('../models');
+'use strict';
+const models = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
 const bcrypt = require('bcrypt');
-const { auther, generateAccessToken, generateRefreshToken, hashed } = require('../helpers/global');
+const helpers = require('../helpers/global');
 const nodemailer = require('nodemailer');
 const CacheControl = require('../controllers/CacheControl');
 const Sniffr = require("sniffr");
 const { Op, fn, literal } = require('sequelize');
 const hbs = require('nodemailer-express-handlebars');
 const config = require('../config/dbconfig');
-
-const getUser = async obj => {
-  return await User.findOne({
-      where: obj
-  });
-}
 
 const getNewApiKey = (id_jenis_client) => {
   let d = new Date().getTime();
@@ -34,9 +29,8 @@ module.exports = {
         if(!apiKey) throw createError.BadRequest('"Api-Key" tidak terdeteksi di request header.');
         const split = apiKey.split('')[5];
         if(apiKey.includes('$')) throw createError.Unauthorized('API key tidak valid!');
-        const auth = await Client.findOne({ where: { jenis_client: split }, raw: true });
-        let x = auth.jenis_client;
-        if (x === 1 || x === 2 || x === 3 || x === 4) {
+        const auth = await models.Client.findOne({ where: { id_jenis_client: split }, raw: true });
+        if (auth) {
           const same = await bcrypt.compare(apiKey, auth.api_key);
           if(same){
             return next();
@@ -52,7 +46,7 @@ module.exports = {
 
   async jwtauthAll(req, res, next) {
     try {
-        const auth = await auther({req, res, next, auth_name: 'userAuthStrategy'});
+        const auth = await helpers.auther({req, res, next, auth_name: 'userAuthStrategy'});
         if(auth instanceof createError) throw auth;
         if (auth.id_role && auth.status_civitas === 'aktif'){
           req.user = auth;
@@ -67,7 +61,7 @@ module.exports = {
 
   async jwtauthAdmin(req, res, next) {   
     try {
-      const auth = await auther({req, res, next, auth_name: 'userAuthStrategy'});
+      const auth = await helpers.auther({req, res, next, auth_name: 'userAuthStrategy'});
       if(auth instanceof createError) throw auth;
       if (auth.id_role === 1 && auth.status_civitas === 'aktif') {
         req.user = auth;
@@ -82,7 +76,7 @@ module.exports = {
 
   async jwtauthDosen(req, res, next) {   
     try {
-      const auth = await auther({req, res, next, auth_name: 'userAuthStrategy'});
+      const auth = await helpers.auther({req, res, next, auth_name: 'userAuthStrategy'});
       if(auth instanceof createError) throw auth;
       if (auth.id_role === 2 && auth.status_civitas === 'aktif') {
         req.user = auth;
@@ -97,7 +91,7 @@ module.exports = {
 
   async jwtauthMhs(req, res, next) {   
     try {
-      const auth = await auther({req, res, next, auth_name: 'userAuthStrategy'});
+      const auth = await helpers.auther({req, res, next, auth_name: 'userAuthStrategy'});
       if(auth instanceof createError) throw auth;
       if (auth.id_role === 3 && auth.status_civitas === 'aktif') {
         req.user = auth;
@@ -112,9 +106,9 @@ module.exports = {
 
   async captcha (req, res, next){
     try {
-      const count = await Captcha.count();
+      const count = await models.Captcha.count();
       const random = Math.floor(Math.random() * count)+1;
-      const getCaptcha = await Captcha.findOne({
+      const getCaptcha = await models.Captcha.findOne({
         where: { id_captcha : random }
       });
       CacheControl.getCaptcha(req);
@@ -128,11 +122,11 @@ module.exports = {
     try {
       const refreshToken = req.body.refreshToken;
       if (!refreshToken) throw createError.Unauthorized('Server error!');
-      const auth = await auther({req, res, next, auth_name: 'refreshTokenAuthStrategy'}); 
+      const auth = await helpers.auther({req, res, next, auth_name: 'refreshTokenAuthStrategy'}); 
       if(auth instanceof createError) throw auth;
-      const newAccessToken = generateAccessToken(auth);
-      const newRefreshToken = generateRefreshToken(auth);      
-      await Token_history.create({
+      const newAccessToken = helpers.generateAccessToken(auth);
+      const newRefreshToken = helpers.generateRefreshToken(auth);      
+      await models.Token_history.create({
         id_user: auth.id,
         refresh_token: newRefreshToken.token,
         isValid: true,
@@ -150,21 +144,21 @@ module.exports = {
   async deleteTokenHistory(req, res, next){
     try {
       const { id } = req.user;
-      const userSession = await Token_history.findOne({
+      const userSession = await models.Token_history.findOne({
         where: {id_user: id}
       });
       if (!userSession) {
         throw createError.Forbidden('User tidak mempunyai history token.');
       }
-      await Token_history.destroy({
+      await models.Token_history.destroy({
         where: {[Op.and]: [
           {id_user: id}, 
           {created_at: 
-            literal(`DATEDIFF(NOW(), "Token_histories"."created_at") > ${config.auth.tokenHistoryexpiry}`)
+            literal(`DATEDIFF(NOW(), token_histories.created_at) > ${config.auth.tokenHistoryexpiry}`)
           }
         ]}
       });
-      await Token_history.update({ isValid: false }, {
+      await models.Token_history.update({ isValid: false }, {
         where: {[Op.and]: [{ id_user: id } , { isValid: true }]}
       });
       res.sendStatus(204);
@@ -180,18 +174,18 @@ module.exports = {
         const passwordUser =  await bcrypt.compare(password, user.password);
         const userJson = user.toJSON();
         // const isAdmin =  userJson.id_role === 1 ? true : false;
-        const accessToken = generateAccessToken(userJson);
-        const refreshToken = generateRefreshToken(userJson);        
-        const tokenExist = await Token_history.findOne({ 
+        const accessToken = helpers.generateAccessToken(userJson);
+        const refreshToken = helpers.generateRefreshToken(userJson);        
+        const tokenExist = await models.Token_history.findOne({ 
           where: {[Op.and]: [{ id_user: userJson.id } , { isValid: true }]}
         });
         if(tokenExist){ // invalidate all old tokens of this user          
-          await Token_history.update({ isValid: false }, {
+          await models.Token_history.update({ isValid: false }, {
             where: {[Op.and]: [{ id_user: userJson.id } , { isValid: true }]}
           });
         }
         if (passwordUser) {
-          await Token_history.create({
+          await models.Token_history.create({
             id_user: userJson.id,
             refresh_token: refreshToken.token,
             isValid: true,
@@ -215,11 +209,13 @@ module.exports = {
   async lupapw(req, res, next){
     try {      
       const { email } = req.body;
-      const user = await getUser({email:email});
+      const user = await models.User.findOne({
+        attributes: ['id'],
+        where: {email: email} 
+      });
       if(!user) {throw createError.BadRequest('email user tidak ditemukan!');}
-      await Lupa_pw.create({
-        username: user.username,
-        email: user.email,
+      await models.Lupa_pw.create({
+        id_user: user.id,
         status: 'belum'
       });
       res.status(200).json({
@@ -234,7 +230,7 @@ module.exports = {
   async lupapwSmtp(req, res, next){
     try {      
       const { email } = req.body;
-      const user = await User.findOne({
+      const user = await models.User.findOne({
         where:{email: email}, attributes: ['id', 'username', 'email']
       });
       if(!user){
@@ -261,13 +257,15 @@ module.exports = {
             name: user.username,
             link_ubah: config.auth.linkubahpw,
             os: sniffer.os.name,
-            browser: sniffer.browser.name
+            browser: sniffer.browser.name,
+            email: email
           }
       };
+      let err;
       transporter.sendMail(mailOptions, (error, info) => {
         if (error){
           console.log(error);
-          throw createError.internal('server error')
+          err = createError.internal('server error');
         }else{
           console.log('email ubah password terkirim: ' + info.response);
           res.status(200).json({
@@ -276,6 +274,7 @@ module.exports = {
           })
         }
       })
+      if(err) throw err
     } catch (error) {
       next(error);
     }
@@ -284,12 +283,12 @@ module.exports = {
   async ubahPassNoauth(req, res, next) {
     try {
         const {new_password, confirm_password} = req.body;
-        const { id } = await req.params;
-        let user = await getUser({ id: id });
-        const { email } = user;
+        const { email } = req.params;
+        const userFound = await models.User.findOne({ where: {email: email} });
+        if(!userFound) throw createError.NotFound('email user tidak ditemukan!');
         if(new_password == confirm_password){
           const hashed = await bcrypt.hash(new_password, 10)
-          await User.update({ 
+          await models.User.update({ 
                   password: hashed,
                   updated_at: fn('NOW')
               }, { 
@@ -297,7 +296,7 @@ module.exports = {
           });
           res.status(200).json({
               success: true,
-              msg: 'Password berhasil diubah!'
+              msg: 'password berhasil diubah.'
           })
         } else {
           throw createError.BadRequest('password tidak sama!')
@@ -311,19 +310,20 @@ module.exports = {
     try {
       const { client_name, client_url, id_jenis_client } = req.body;
       const apiKey = getNewApiKey(id_jenis_client);
-      const hashed = await bcrypt.hash(apiKey, 10); 
-      await Client.create({
+      const hashed = await bcrypt.hash(apiKey, 10);
+      const client = await models.Client.create({
         client_name: client_name,
         client_url: client_url,
         api_key: hashed,
-        jenis_client: id_jenis_client,
+        id_jenis_client: id_jenis_client,
         created_at: fn('NOW')
       });
       CacheControl.postClient();
-      res.status(200).json({
+      res.status(201).json({
         success: true,
         msg: 'Client berhasil ditambahkan!',
-        apiKey: apiKey
+        apiKey: apiKey,
+        data: client
       });
     } catch (error) {
       next(error);
@@ -332,12 +332,26 @@ module.exports = {
 
   async getAllClient(req, res, next) {
     try {
-      const client = await Client.findAll({
-        attributes: ['id_client', 'client_name', 'client_url', 
-        'jenis_client', 'created_at', 'updated_at']
+      const client = await models.Client.findAll({
+        include: {
+          model: models.Ref_jenis_client,  as: 'Jenis_client'
+        },
+        raw: true, nest: true
       });
+      const data = client.map((i) => {
+        return {
+          id_client: i.id_client,
+          client_name: i.client_name,
+          client_url: i.client_url,
+          api_key: i.api_key,
+          jenis_client: i.Jenis_client.jenis_client,
+          created_at: i.created_at,
+          updated_at: i.updated_at,
+          deleted_at: i.deleted_at
+        }
+      })
       CacheControl.getAllClient(req);
-      res.status(200).json(client);
+      res.status(200).json(data);
     } catch (error) {
       next(error);
     }  
@@ -347,7 +361,7 @@ module.exports = {
     try {
       const id_client = req.params.id_client;
       const { client_name, client_url, id_jenis_client } = req.body;
-      await Client.update({
+      await models.Client.update({
         client_name: client_name,
         client_url: client_url,
         jenis_client: id_jenis_client,
@@ -355,10 +369,14 @@ module.exports = {
       }, {
         where: { id_client: id_client }
       });
+      const data = await models.Client.findOne({
+        where: { id_client: id_client }
+      });
       CacheControl.putClient();
       res.status(200).json({
         success: true,
-        msg: 'data Client berhasil diubah!'
+        msg: 'data Client berhasil diubah!',
+        data: data
       });
     } catch (error) {
       next(error);
@@ -368,7 +386,7 @@ module.exports = {
   async deleteClient(req, res, next) {
     try {
       const id_client = req.params.id_client;
-      await Client.destroy({
+      await models.Client.destroy({
         where: { id_client: id_client }
       });
       CacheControl.deleteClient();
@@ -385,12 +403,12 @@ module.exports = {
     try {
       const id_client = req.params.id_client;
       const { current_api_key } = req.body;
-      const client = await Client.findOne({ where: { id_client: id_client }});
+      const client = await models.Client.findOne({ where: { id_client: id_client }});
       const sama = await bcrypt.compare(current_api_key, client.api_key);
       if(sama){
         const apiKey = getNewApiKey(client.jenis_client);
         const hashed = await bcrypt.hash(apiKey, 10); 
-        await Client.update({
+        await models.Client.update({
           api_key: hashed,
           updated_at: fn('NOW')
         }, {
@@ -398,7 +416,8 @@ module.exports = {
         });
         res.status(200).json({
           success: true,
-          msg: 'api-key Client berhasil diubah!'
+          msg: 'api-key Client berhasil diubah!',
+          apiKey_baru: apiKey
         });
       } else {
         throw createError.BadRequest('api key salah!');
@@ -411,10 +430,10 @@ module.exports = {
   async setAdmin (req, res, next){
     try {
         const { email, username } = req.body
-        await User.create({
+        const user = await models.User.create({
           username: username,
           email: email,
-          password: await hashed(),
+          password: await helpers.hashed(),
           status_civitas: 'aktif',
           id_role: '1',
           foto_profil: config.auth.defaultProfilePic,
@@ -422,9 +441,10 @@ module.exports = {
           created_at: fn('NOW')
         });
         CacheControl.postNewAdmin();
-        res.status(200).json({
+        res.status(201).json({
           success: true,
-          msg: 'admin berhasil ditambahkan'
+          msg: 'admin berhasil ditambahkan',
+          data: user
         });
     } catch (error) {
         next(error);

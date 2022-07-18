@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const Matakuliah = sequelize.define('Matakuliah', {
         id_matkul: {
@@ -33,11 +34,17 @@ module.exports = (sequelize, DataTypes) => {
         },
         deskripsi: {
             type: DataTypes.TEXT
+        },
+        updated_at: { 
+            type: DataTypes.DATE,
+            defaultValue: null
         }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
+        createdAt: 'created_at',
+        updatedAt: false,
         deletedAt: 'deleted_at'
     });
 

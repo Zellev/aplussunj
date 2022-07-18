@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
     const Semester = sequelize.define('Ref_semester', {
         id_semester: { 
@@ -11,10 +12,16 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             unique:true
         },
+        updated_at: { 
+            type: DataTypes.DATE,
+            defaultValue: null
+        }
     }, {
         freezeTableName: true,
-        timestamps: false,
+        timestamps: true,
         paranoid: true,
+        createdAt: 'created_at',
+        updatedAt: false,
         deletedAt: 'deleted_at'
     });
 

@@ -19,7 +19,7 @@
           }
           
           a {
-            color: #3869D4;
+            color: #7ea7ff;
           }
           
           a img {
@@ -104,58 +104,23 @@
             text-align: center;
           }
           /* Buttons ------------------------------ */
-          .btn {
-            line-height: 50px;
-            height: 50px;
-            text-align: center;
-            font-size: 130%;
-            font-weight: bold;
-            width: 250px;
-            cursor: pointer;
-            border-radius: 16px;
-          }          
-          .btn-three {
-            background-color: rgb(56, 190, 88);
-            color: white;
-            transition: all 0.5s;
-            position: relative;
-            cursor: pointer;
-            border-radius: 16px;
+          .button {
+            font-size: 18px; 
+            font-family: Helvetica, Arial, sans-serif; 
+            color: #ffffff; 
+            font-weight: bold; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            background-color: #21ad63; 
+            border-top: 12px solid #21ad63; 
+            border-bottom: 12px solid #21ad63; 
+            border-right: 18px solid #21ad63; 
+            border-left: 18px solid #21ad63; 
+            display: inline-block;
           }
-          .btn-three::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-            background-color: rgba(255,255,255,0.1);
-            transition: all 0.3s;
-            border-radius: 16px;
-          }
-          .btn-three:hover::before {
-            opacity: 0 ;
-            transform: scale(0.5,0.5);
-            cursor: pointer;
-          }
-          .btn-three::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-            opacity: 0;
-            transition: all 0.3s;
-            border: 1px solid #00FF7F;
-            transform: scale(1.2,1.2);
-            border-radius: 16px;
-          }
-          .btn-three:hover::after {
-            opacity: 1;
-            transform: scale(1,1);            
+
+          .button:hover {
+            color: #1F7F4C;
           }
           
           @media only screen and (max-width: 500px) {
@@ -467,7 +432,7 @@
                 <table class="email-content" width="100%" cellpadding="0" cellspacing="0" role="presentation">
                   <tr>
                     <td class="email-masthead">
-                      <a href="https://example.com" class="f-fallback email-masthead_name">
+                      <a href="apluss.universitasnegerijakarta.ac.id" class="f-fallback email-masthead_name">
                       APLUSS Universitas Negeri Jakarta
                     </a>
                     </td>
@@ -491,9 +456,7 @@
                                     <table width="100%" border="0" cellspacing="0" cellpadding="0" role="presentation">
                                       <tr>
                                         <td align="center">
-                                          <button href={{link_ubah}} class="btn btn-three" target="_blank">
-                                            Ubah Password
-                                          </button>                                          
+                                          <a class="button" href="{{link_ubah}}/{{email}}" target="_blank">Link Ubah &rarr;</a>
                                         </td>
                                       </tr>
                                     </table>
@@ -509,7 +472,7 @@
                                 <tr>
                                   <td>
                                     <p class="f-fallback sub">jika tombol diatas tidak berfungsi, copy paste-kan link dibawah ini ke browser anda.</p>
-                                    <p class="f-fallback sub">{{link_ubah}}</p>
+                                    <p class="f-fallback sub">{{link_ubah}}/{{email}}</p>
                                   </td>
                                 </tr>
                               </table>

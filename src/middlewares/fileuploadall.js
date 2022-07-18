@@ -1,7 +1,9 @@
+"use strict";
 const Multer = require('multer');
 const path = require('path');
 const { todaysdate } = require('../helpers/global');
 const PathPic = path.join(__dirname, '../../public/fileuploads/picInput');
+const PathGambarSoal = path.join(__dirname, '../../public/fileuploads/picInput/gambar_soal/');
 const PathBanner = path.join(__dirname, '../../public/default-images/banner');
 const PathIllustrasiMatkul = path.join(__dirname, '../../public/default-images/illustrasi_matkul');
 const PathXl = path.join(__dirname, '../../public/fileuploads/xlsxInput');
@@ -128,10 +130,7 @@ const createError = require('../errorHandlers/ApiErrors');
     let filestorage = Multer.diskStorage({
         destination: (req, file, cb) => {
             switch(file.fieldname){
-                case 'foto_profil':             
-                case 'gambar_soal_1':
-                case 'gambar_soal_2':
-                case 'gambar_soal_3':
+                case 'foto_profil':
                 case 'gambar_jawaban[]':
                     cb(null, PathPic);
                 break;
@@ -156,14 +155,19 @@ const createError = require('../errorHandlers/ApiErrors');
                 case 'gambar_matkul':
                     cb(null, PathIllustrasiMatkul);
                 break;
+                case 'gambar_soal_1':
+                case 'gambar_soal_2':
+                case 'gambar_soal_3':
+                    cb(null, PathGambarSoal);
+                break;
                 default:
                     cb(null, PathDefault);
             }
         },
         filename: (req, file, cb) => {
             let filename;
-            if(file.fieldname === 'audio_soal[]'|| file.fieldname === 'video_soal[]'||
-            file.fieldname === 'gambar_banner' || file.fieldname === 'gambar_matkul'){
+            const fieldname = ['audio_soal[]', 'video_soal[]', 'gambar_banner', 'gambar_matkul']
+            if(fieldname.includes(file.fieldname)){
                 filename = file.originalname;
                 cb(null, `${filename}`);
             } else {

@@ -1,8 +1,10 @@
  /* eslint-disable */
+ "use strict";
 const { format } = require('date-fns');
 const { Op } = require('sequelize');
+const createError = require('../errorHandlers/ApiErrors');
 
-const alphanum = /^[a-zA-Z0-9\s]+$/;
+const alphanum = /^[a-zA-Z0-9\s\@\.\-\_]+$/;
 const aktifkeywords = [ 'aktif', 'berlaku', 'berjalan', 'berlangsung' ];
 const nonaktifkeywords = [ 
   'tidak', 'non', 'non aktif', 'tidak berlaku', 'tidak berjalan', 'tidak berlangsung' 
@@ -98,7 +100,7 @@ module.exports = {
     return searchObj;
   },
 
-  ujianValidator(find) {
+  ujianValidator(find, role) {
   let filtered, searchObj;
   const dateRegex = /([0-2][0-9]|(3)[0-1])(\-|\/)(((0)[0-9])|((1)[0-2]))(\-|\/)\d{4}/.test(find);
   const id = /^[1-9]\d{0,2}(?:\,\d{1,3})?$/.test(find);
@@ -128,7 +130,15 @@ module.exports = {
         {'$RefJenis.jenis_ujian$': {[Op.like]:'%' + filtered + '%'}},
         {judul_ujian: {[Op.like]:'%' + filtered + '%'}},
         {status_ujian: {[Op.like]:'%' + filtered + '%'}}
-      ]        
+      ]
+      if(role == 'mhs') {
+        searchObj = [
+          {kode_paket: {[Op.like]:'%' + filtered + '%'}},
+          {'$Ujian.RefJenis.jenis_ujian$': {[Op.like]:'%' + filtered + '%'}},
+          {'$Ujian.judul_ujian$': {[Op.like]:'%' + filtered + '%'}},
+          {'$Ujian.status_ujian$': {[Op.like]:'%' + filtered + '%'}}
+        ]
+      }
     } else {
       searchObj = createError.BadRequest('Invalid search query');
     }

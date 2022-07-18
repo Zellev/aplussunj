@@ -1,4 +1,5 @@
 /* eslint-disable */
+"use strict";
 const createError = require('../errorHandlers/ApiErrors')
 const Passport = require('passport');
 const jwt = require('jsonwebtoken');
@@ -73,25 +74,18 @@ module.exports = {
             limit: limit
         }
     }
-    if(options){
-      if( 'countModel' in options){
-        if (endIndex < await options.countModel.count()) {
-          results.next = {
-              page: page + 1,
-              limit: limit
-          }
-        }        
-        delete options.countModel
-        results.results = await model.findAll(options)
-      } else {
-        results.results = await model.findAll(options)
-      }          
+    if( 'countModel' in options){
+      if (endIndex < await options.countModel.count()) {
+        results.next = {
+            page: page + 1,
+            limit: limit
+        }
+      }        
+      delete options.countModel
+      results.results = await model.findAll(options)
     } else {
-      results.results = await model.findAll({
-          offset:startIndex,
-          limit:limit
-      })
-    }        
+      results.results = await model.findAll(options)
+    }      
     return results
   },
 
@@ -181,7 +175,7 @@ module.exports = {
 
   async createKode(length) {
     let kdPaket = '', paketExist;
-    var characters       = config.codegen.char;
+    var characters       = config.codegen.char1;
     var charactersLength = characters.length;
     function shuffle(char){
       var a = char.split(""), n = a.length;  
@@ -199,11 +193,22 @@ module.exports = {
       }  
       paketExist = await models.Paket_soal.findOne({  //paketExist = null
         attributes:['kode_paket'],
-        where: {kode_paket: kdPaket}
+        where: {kode_paket: kdPaket},
+        paranoid: false
       });
       characters = shuffle(characters);
     } while(paketExist) // false
     return kdPaket;
+  },
+
+  randomName(length) {
+    let name = '';
+    var characters       = config.codegen.char2;
+    var charactersLength = characters.length;    
+    for ( var i = 0; i < length; i++ ) {
+      name += characters.charAt(Math.floor(Math.random() * charactersLength));
+    }  
+    return name;
   },
 
   shuffleArray() {
@@ -231,7 +236,7 @@ module.exports = {
     while (arrLength) {
       rnd = Math.floor(Math.random() * arrLength);
       arrLength -= 1;
-      for (argsIndex = 0; argsIndex < argsLength; argsIndex += 1) {
+      for (let argsIndex = 0; argsIndex < argsLength; argsIndex += 1) {
         tmp = arguments[argsIndex][arrLength];
         arguments[argsIndex][arrLength] = arguments[argsIndex][rnd];
         arguments[argsIndex][rnd] = tmp;
@@ -299,7 +304,7 @@ module.exports = {
         combined = path.join(__dirname,'../../public/default-images/banner/' + filename);
       break;
       case 'img-matkul':
-        combined = path.join(__dirname,'../../public/default-images/thumbnail/' + filename);
+        combined = path.join(__dirname,'../../public/default-images/illustrasi_matkul/' + filename);
       break;
       case 'img-thumbnail':
         combined = path.join(__dirname,'../../public/default-images/thumbnail/' + filename);
@@ -326,7 +331,7 @@ module.exports = {
     const count = await models.Ref_illustrasi.count();
     const random = Math.floor(Math.random() * count)+1;
     const getIllustrasi = await models.Ref_illustrasi.findOne({
-      where: { id_illuatrasi : random },
+      where: { id_illustrasi : random },
       raw: true
     });
     return getIllustrasi.nama_illustrasi;
@@ -340,6 +345,78 @@ module.exports = {
     const model = await models[modelName].findOne({raw: true});
     if(typeof model !== 'object') return createError.BadRequest('Model not found');
     return Object.keys(model)[0];
+  },
+
+  async getUsername() {
+    let getUserid = await models.User.max('id').then((val) => {
+      return val + 1;
+    }), username, increment = 0, usernameExist;
+    do {
+      username = `User ${getUserid + increment}`;
+      usernameExist = await models.User.findOne({  
+        attributes: ['id'],
+        where: {username: username},
+        paranoid: false
+      });
+      increment++;
+    } while(usernameExist) // false
+    return username;
+  },
+
+  async getQuotaSoal(opt) {
+    let durasi_ujian, replace, durasi_per_soal, replace2, quota_soal;
+    if('req' in opt){
+      durasi_ujian = opt.req.body.durasi_ujian;
+      durasi_per_soal = opt.req.body.durasi_per_soal;
+    } else {
+      let ujian;
+      if(opt.id_ujian){
+        ujian = await models.Ujian.findOne({ 
+          where: { id_ujian: opt.id_ujian }, raw: true 
+        });
+        durasi_ujian = ujian.durasi_ujian;
+        durasi_per_soal = ujian.durasi_per_soal;
+      } else {
+        ujian = await models.Paket_soal.findOne({ 
+          where: { id_paket: opt.id_paket }, 
+          include: { model: models.Ujian, as: 'Ujian' },
+          raw: true 
+        });
+        durasi_ujian = ujian.Ujian,durasi_ujian;        
+        durasi_per_soal = ujian.Ujian.durasi_per_soal;        
+      }     
+    }
+    replace = durasi_ujian.replaceAll(':', '');
+    replace2 = durasi_per_soal.replaceAll(':', '');  
+    quota_soal = Math.floor(replace / replace2);  
+    return quota_soal;
+  },
+  
+  tipePenilaian(kata_kunci_soal, id_soal){
+    const kata_kunci = kata_kunci_soal;
+    const soalLength = id_soal.length;
+    let totalArray = 0, totalNull = 0;
+    for(let i of kata_kunci){
+        if(Array.isArray(i)){
+            totalArray++;
+        } else if(i == null){
+            totalNull++;
+        } else {
+            return createError.BadRequest(
+              'kata kunci harus berupa "array of arrays of objects" atau "array of null"'
+            )
+        }
+    }
+    if(totalArray === soalLength && totalNull === 0){        
+        return 'automatis';
+    } else if(totalNull === soalLength && totalArray === 0){
+        return 'manual';
+    } else if(totalArray !== 0 && totalArray < soalLength && 
+              totalNull !== 0 && totalNull < soalLength){
+        return 'campuran';
+    } else {
+        return createError.BadRequest('format array kata kunci salah!');
+    }
   }
   
 }

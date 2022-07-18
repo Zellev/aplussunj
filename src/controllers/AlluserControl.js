@@ -1,60 +1,102 @@
-const bcrypt = require('bcrypt');
-const { User, Dosen, Matakuliah, Kelas, Soal_essay, 
-        Jawaban_mahasiswa, Pengumuman, Ujian, Paket_soal, Rel_paketsoal_soal, 
-        Rel_mahasiswa_paketsoal, Notifikasi, Ref_jenis_ujian, Ref_kel_matkul, 
-        Ref_peminatan, Ref_semester, Ref_illustrasi } = require('../models');
+"use strict";
+const models = require('../models');
 const createError = require('../errorHandlers/ApiErrors');
-const { paginator } = require('../helpers/global');
-const { kelasValidator } = require('../validator/SearchValidator');
-const { Op, fn, col } = require('sequelize');
+const helpers = require('../helpers/global');
+const searchsValid = require('../validator/SearchValidator');
+const { Op, fn, col, literal } = require('sequelize');
 const CacheControl = require('./CacheControl');
+const config = require('../config/dbconfig');
+const bcrypt = require('bcrypt');
 const jp = require('jsonpath');
+const { format } = require('date-fns') 
 
 const getUser = async obj => {
-    return User.findOne({
+    return models.User.findOne({
         where: obj
     });
 }
 
 module.exports = {
 
+  async getProfilSidebar(req, res, next) {
+    try {
+      const user = req.user
+      const data = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        foto_profil: user.foto_profil,
+      }
+      CacheControl.getProfilSidebar(req)
+      res.status(200).json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async getProfilUser(req, res, next){
     try {
-      const logged = req.user
-      CacheControl.getProfilSingkat(req);
-      res.status(200).json({
-        user: {
-          id: logged.id,
-          username: logged.username,
-          email: logged.email,
-          foto_profil: logged.foto_profil
-        }
-      });
+      const { id_user } = req.params;
+      const user = await getUser({id: id_user});
+      let role;
+      if (user.id_role === 3){
+        const mhs =  await user.getMahasiswa();
+        role = {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          status_civitas: user.status_civitas,
+          id_role: user.id_role,
+          role: 'Mahasiswa',
+          foto_profil: user.foto_profil,
+          keterangan: user.keterangan,
+          created_at: user.created_at,
+          updated_at: user.updated_at,
+          data_mahasiswa: mhs
+        };
+      } else if (user.id_role === 2){
+        const dosen =  await user.getDosen();
+        role = {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          status_civitas: user.status_civitas,
+          id_role: user.id_role,
+          role: 'Dosen',
+          foto_profil: user.foto_profil,
+          keterangan: user.keterangan,
+          created_at: user.created_at,
+          updated_at: user.updated_at,
+          data_dosen: dosen
+        };
+      } else if(user.id_role === 1 && req.user.id_role === 3){
+        throw createError.Forbidden('Access denied.');
+      } else {
+        role = user;
+      }
+      CacheControl.getProfil(req);
+      res.status(200).json(role);
     } catch (error) {
-      next(error)
+      next(error);
     }
   },
   
   async ubahPass(req, res, next) {
     try {
         const {current_password, new_password, confirm_password} = req.body;
-        const { id } = await req.params;
-        let user = await getUser({ id: id });
-        const { email } = user;
-        let password = current_password;
-        const passwordUser = await bcrypt.compare(password, user.password);  
+        const passwordUser = await bcrypt.compare(current_password, req.user.password);  
         if (passwordUser) {
           if(new_password == confirm_password){
             const hashed = await bcrypt.hash(new_password, 10)
-            await User.update({ 
+            await models.User.update({ 
                     password: hashed,
                     updated_at: fn('NOW')
                 }, { 
-                    where: { email: email }
+                    where: { id: req.user.id }
             });
             res.status(200).json({
                 success: true,
-                msg: 'Password Berhasil Diubah!'
+                msg: 'password berhasil diubah.'
             })
           }else {
             throw createError.BadRequest('password tidak sama!')
@@ -69,16 +111,22 @@ module.exports = {
   
   async setAvatar(req, res, next) {
     try {
+      if(!req.file) throw createError.BadRequest('tidak ada gambar yang diupload.');
         const file = req.file.filename;
         const { id } = req.user;
         let updateVal = { foto_profil: file, updated_at: fn('NOW')};
-        await User.update(updateVal,{
-            where: { id: id }
+        await models.User.update(updateVal,{
+          where: { id: id }
+        });
+        const data = await models.User.findOne({
+          attributes: ['id', 'foto_profil', 'created_at', 'updated_at'],
+          where: { id: id }
         });
         CacheControl.postProfilePic();
         res.status(200).json({
-            success: true,
-            msg: 'Foto berhasil diubah.'
+          success: true,
+          msg: 'Foto berhasil diubah.',
+          data: data
         });
     } catch (error) {
         next(error);
@@ -88,10 +136,10 @@ module.exports = {
   async getperSemester(req, res, next) {
     try {
       const { id_semester } = req.params;
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      const pages = parseInt(req.query.page) || 1;
+      const limits = parseInt(req.query.limit) || config.pagination.pageLimit;
       let opt = {
-        attributes: ['id_kelas', 'kode_seksi', 'id_matkul', 'semester', 'hari', 'jam'],        
+        attributes: ['id_kelas', 'kode_seksi', 'id_matkul', 'id_semester', 'hari', 'jam'],        
         where: {[Op.or]:[
           { '$RefSem.id_semester$': {[Op.eq]: id_semester}},
           { '$RefSem.semester$': {[Op.like]:'%' + id_semester + '%'}}
@@ -99,14 +147,14 @@ module.exports = {
         offset: (pages - 1) * limits,
         limit: limits,
         include: [
-          {model: Ref_semester, as: 'RefSem', required: true},
-          {model: Dosen, as: 'Dosens', attributes: ['nama_lengkap'], 
+          {model: models.Ref_semester, as: 'RefSem', required: true},
+          {model: models.Dosen, as: 'Dosens', attributes: ['nama_lengkap'], 
             through: {attributes:[]}},
-          {model: Matakuliah, as: 'Matkul', attributes: ['nama_matkul']},          
+          {model: models.Matakuliah, as: 'Matkul', attributes: ['nama_matkul']},          
         ],
-        order: [['id_seksi', 'ASC']]
+        order: [['id_kelas', 'ASC']]
       }
-      const sms = await paginator(Kelas, pages, limits, opt);
+      const sms = await helpers.paginator(models.Kelas, pages, limits, opt);
       const kelas = sms.results.map((i) => {
         return {
           id_kelas: i.id_kelas,
@@ -135,42 +183,41 @@ module.exports = {
     try {
       const { id_paket } = req.params
       const finder = (obj) => {
-        return Paket_soal.findOne({
+        return models.Paket_soal.findOne({
           attributes: ['id_paket', 'aktif'],
           where: obj,
-          include: [
-            {model:Soal_essay, as:'Soals', attributes: ['id_soal', 'soal'], 
-            through: {attributes: ['id','no_urut_soal','bobot_soal']}}
-          ],
+          include: {
+            model: models.Soal_essay, as:'Soals', through: {attributes: ['id','no_urut_soal','bobot_soal']}
+          },
           order: [
-            [{model:Soal_essay, as:'Soals'}, Rel_paketsoal_soal, 'no_urut_soal', 'ASC']
+            [{model: models.Soal_essay, as:'Soals'}, models.Rel_paketsoal_soal, 'no_urut_soal', 'ASC']
           ]
         });
       }
-      let pkSoal;
+      let pkSoal, no = 1;
       if(req.user.id_role === 1 || req.user.id_role === 2){
         pkSoal = await finder({id_paket: id_paket});
         if(!pkSoal){
           throw createError.BadRequest('paket soal tidak terdaftar...')
         }
       } else {
-        pkSoal = await finder({[Op.and]:[{id_paket: id_paket}, {aktif:1}]});
+        pkSoal = await finder({[Op.and]:[{id_paket: id_paket}, {aktif: 1}]});
         if(!pkSoal){
           throw createError.BadRequest('paket soal tidak terdaftar atau tidak aktif.')
         }
       }
-      const soal = pkSoal.Soals.map((i) => {
+      const soal = pkSoal.Soals.map((i) => {       
         return {
-          id_relasi_soalpksoal: i.Rel_paketsoal_soal.id,
-          no_urut_soal: i.Rel_paketsoal_soal.no_urut_soal,
+          no_urut_soal: no++,
+          id_relasi_soalpksoal: i.Rel_paketsoal_soal.id,          
           id_soal: i.id_soal,
           soal: i.soal,
           bobot_soal: i.Rel_paketsoal_soal.bobot_soal,
-          // gambar_soal: i.gambar_soal,
-          // audio_soal: i.audio_soal,
-          // video_soal: i.video_soal,
-          // created_at: i.created_at,
-          // updated_at: i.updated_at
+          gambar_soal: i.gambar_soal,
+          audio_soal: i.audio_soal,
+          video_soal: i.video_soal,
+          created_at: i.created_at,
+          updated_at: i.updated_at
         }
       });
       CacheControl.getSoalPaketSoal(req);
@@ -186,68 +233,30 @@ module.exports = {
     }
   },
   /* Kelas Methods*/
-  async getAllKelas(req, res, next) {
+  async getorsearchKelas(req, res, next) {
     try {
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
-        let val = await paginator(Kelas, pages, limits);
-        let vals = [];
-        if(val.results.length !== 0){
-          for(let i of val.results) {
-            let matkul = await i.getMatkul()
-            let sems = await i.getRefSem()
-            let dosen = await i.getDosens({
-              attributes: ['nama_lengkap'],
-              joinTableAttributes: []
-            })            
-            vals.push({
-              id_kelas: i.id_kelas,
-              thumbnail_kelas: i.illustrasi_kelas,
-              kode_seksi: i.kode_seksi,
-              nama_matkul: matkul.nama_matkul,
-              semester: sems.semester,
-              hari: i.hari,
-              jam: i.jam,
-              dosen_pengampu: dosen
-            })
-          }
-        } else {
-          vals.push('no record...')
-        }
-        const kelas = await Promise.all(vals);
-        CacheControl.getAllKelas(req);
-        res.status(200).json({
-            next:val.next,
-            previous:val.previous,
-            kelas: kelas
-        });
-    } catch (error) {
-      next(error);
-    }
-  },
-
-  async searchKelas(req, res, next) {
-    try {
-      let { find } = req.query;
-      const validator = kelasValidator(find);
-      if (validator instanceof createError) throw validator;
-      const pages = parseInt(req.query.page);
-      const limits = parseInt(req.query.limit);
+      let { find, page, limit } = req.query;
+      const pages = parseInt(page) || 1;
+      const limits = parseInt(limit) || config.pagination.pageLimit;
       let opt = {        
         attributes: ['id_kelas', 'kode_seksi', 'id_matkul', 'id_semester', 'hari', 'jam'],
-        where: { [Op.or]: validator },
         offset: (pages - 1) * limits,
         limit: limits, 
         subQuery: false,
         include: [
-          { model: Matakuliah, as: 'Matkul', attributes: ['nama_matkul'] },
-          { model: Ref_semester, as: 'RefSem', attributes: ['semester'] },
-          { model: Dosen, as: 'Dosens',
+          { model: models.Matakuliah, as: 'Matkul', attributes: ['nama_matkul'] },
+          { model: models.Ref_semester, as: 'RefSem', attributes: ['semester'] },
+          { model: models.Dosen, as: 'Dosens',
             attributes: ['nama_lengkap'], through: {attributes:[]} }
         ],
         order: [['id_kelas', 'ASC']]
-      }      
-      const kelas = await paginator(Kelas, pages, limits, opt);
+      }
+      if(find) {
+        const validator = searchsValid.kelasValidator(find);
+        if (validator instanceof createError) throw validator;
+        opt.where = { [Op.or]: validator }
+      }
+      const kelas = await helpers.paginator(models.Kelas, pages, limits, opt);
       const result = kelas.results.map((i) => {
         return {
           id_kelas: i.id_kelas,
@@ -281,14 +290,14 @@ module.exports = {
         } else {
           status = {[Op.or]: ['akan dimulai','sedang berlangsung','selesai']}
         }
-        const val = await Kelas.findOne({
+        const val = await models.Kelas.findOne({
           where: {id_kelas: id_kelas},
           include: [
-            {model: Matakuliah, as: 'Matkul', attributes: ['nama_matkul']},
-            {model: Dosen, as: 'Dosens', attributes: {
+            {model: models.Matakuliah, as: 'Matkul', attributes: ['nama_matkul']},
+            {model: models.Dosen, as: 'Dosens', attributes: {
               exclude:[ 'id_user','alamat','nomor_telp','created_at','updated_at']
             }, through: {attributes:[]}},
-            {model: Ujian, as: 'Ujians', required: false, where: {status_ujian: status},
+            {model: models.Ujian, as: 'Ujians', required: false, where: {status_ujian: status},
               attributes: { exclude:['durasi_ujian','tipe_penilaian','deskripsi','created_at','updated_at']
             }, through: {attributes:[]}}
           ]
@@ -317,7 +326,7 @@ module.exports = {
   /* end Kelas Methods*/    
   async getPengumumn(req, res, next) {
     try {
-        const getPengumuman = await Pengumuman.findAll({
+        const getPengumuman = await models.Pengumuman.findAll({
           where: {status : 'tampil'}
         });
         CacheControl.getPengumuman(req);
@@ -330,7 +339,7 @@ module.exports = {
   async getNotifikasi(req, res, next) {
     try {
       const user = await req.user
-      const notifikasi = await Notifikasi.findOne({
+      const notifikasi = await models.Notifikasi.findOne({
         attributes: ['id_pengirim', 'notifikasi', 'created_at', 'updated_at'],
         where: {id_penerima: user.id}
       });
@@ -340,42 +349,43 @@ module.exports = {
           msg: 'tidak ada notifikasi baru.'
         })
       }
-      let pengirim;
-      if(notifikasi.id_pengirim){
-        pengirim = await User.findOne({
-          attributes: ['username', 'id_role'],
-          where: {id: notifikasi.id_pengirim} 
-        });
-      }      
-      const role = () => {
-        let role;
-        switch(pengirim.id_role){
-          case 1:
-            role = 'admin'
-          break;
-          case 2:
-            role = 'dosen'
-          break;
-          case 3:
-            role = 'mahasiswa'
-          break;
-          default: 
-            role = 'sistem'
+      if(notifikasi){
+        let pengirim;
+        if(notifikasi.id_pengirim){
+          pengirim = await models.User.findOne({
+            attributes: ['username', 'id_role'],
+            where: {id: notifikasi.id_pengirim} 
+          });
+        }      
+        const role = () => {
+          let role;
+          switch(pengirim.id_role){
+            case 1:
+              role = 'admin'
+            break;
+            case 2:
+              role = 'dosen'
+            break;
+            case 3:
+              role = 'mahasiswa'
+            break;
+            default: 
+              role = 'sistem'
+          }
+          return role;
         }
-        return role;
+        const notif = {
+          data_pengirim: {
+            username: pengirim.username || 'sistem',
+            role: role()
+          },
+          notifikasi: notifikasi.notifikasi,
+          created_at: notifikasi.created_at,
+          updated_at: notifikasi.updated_at
+        }
+        CacheControl.getNotifikasi(req);
+        res.status(200).json(notif);
       }
-      pengirim.username ? pengirim.username : pengirim.username = 'sistem'
-      const notif = {
-        data_pengirim: {
-          username: pengirim.username,
-          role: role()
-        },
-        notifikasi: notifikasi.notifikasi,
-        created_at: notifikasi.created_at,
-        updated_at: notifikasi.updated_at
-      }
-      CacheControl.getNotifikasi(req);
-      res.status(200).json(notif);
     } catch (error) {
       next(error);
     }
@@ -383,7 +393,7 @@ module.exports = {
 
   async getIllustrasi(req, res, next) {
     try {
-      const illustrasi = await Ref_illustrasi.findAll({
+      const illustrasi = await models.Ref_illustrasi.findAll({
         order: [['id_illustrasi', 'ASC']]
       });
       CacheControl.getIllustrasi(req);
@@ -395,7 +405,7 @@ module.exports = {
 
   async getJenisUjian(req, res, next) {
     try {
-      const jenis_ujian = await Ref_jenis_ujian.findAll({
+      const jenis_ujian = await models.Ref_jenis_ujian.findAll({
         where: {jenis_ujian: {[Op.ne]: null}},
         order: [['id_jenis_ujian', 'ASC']]
       });
@@ -408,7 +418,7 @@ module.exports = {
 
   async getKelompokMatakuliah(req, res, next) {
     try {
-      const kel_mk = await Ref_kel_matkul.findAll({
+      const kel_mk = await models.Ref_kel_matkul.findAll({
         order: [['id_kel_mk', 'ASC']]
       });
       CacheControl.getKelompokMatakuliah(req);
@@ -420,7 +430,7 @@ module.exports = {
 
   async getPeminatan(req, res, next) {
     try {
-      const peminatan = await Ref_peminatan.findAll({
+      const peminatan = await models.Ref_peminatan.findAll({
         where: {peminatan: {[Op.ne]: null}},
         order: [['id_peminatan', 'ASC']]
       });
@@ -433,7 +443,7 @@ module.exports = {
 
   async getSemester(req, res, next) {
     try {
-      const semester = await Ref_semester.findAll({
+      const semester = await models.Ref_semester.findAll({
         where: {semester: {[Op.ne]: null}},
         order: [['id_semester', 'ASC']]
       });
@@ -446,23 +456,28 @@ module.exports = {
 
 
   // SISTEM
-  async getTipePenilaian(req, res, next) {
+  async getUjianToday(req, res, next){
     try {
-      const idUjian = req.params.id_ujian;
-      const tipe_penilaian = await Ujian.findOne({
-        attributes: ['id_ujian', 'tipe_penilaian'],
-        where: {id_ujian: idUjian}
+      const tanggal_mulai = format(Date.now(), 'yyyy-MM-dd');
+      const ujian = await models.Ujian.findAll({
+        where: {
+          [Op.and]: [
+            {tanggal_mulai: tanggal_mulai},
+            {status_ujian: 'akan dimulai'},
+            {aktif: true}
+          ]
+        }
       });
-      res.status(200).json(tipe_penilaian);
+      res.json(ujian);
     } catch (error) {
-      next(error);
+      throw next(error);
     }
   },
 
   async setNotifikasi(req, res, next) {
     try {
       const { id_penerima, pesan } = req.body;
-      const userPenerima = await User.findOne({
+      const userPenerima = await models.User.findOne({
         attributes: ['id'],
         where: { id: id_penerima }
       });
@@ -470,7 +485,7 @@ module.exports = {
         console.error(`user ${id_penerima} tidak ditemukan.`);
         throw createError.NotFound(`user ${id_penerima} tidak ditemukan.`);
       }
-      await Notifikasi.create({
+      await models.Notifikasi.create({
         id_penerima: userPenerima.id,
         notifikasi: pesan,
         created_at: fn('NOW')
@@ -481,20 +496,49 @@ module.exports = {
       next(error);
     }
   },
-  
+
+  // async autoDelete(req, res, next) {
+  //   try {
+  //     const models = require('../models');
+  //     const { nama_model, hari } = req.params;
+  //     await models[nama_model].destroy({
+  //       where: {created_at: 
+  //         literal(`DATEDIFF(NOW(), ujian.created_at) > ${hari}`)
+  //       }
+  //     })
+  //     res.sendStatus(204);
+  //   } catch(error) {
+  //     next(error);
+  //   }
+  // },
+
+  async patchKeaktifanUjian(req, res, next) {
+    try {
+      await models.Ujian.update({aktif: 0}, {
+        where: {created_at: 
+          literal(`DATEDIFF(NOW(), ujian.created_at) > ${config.ujianexpiry}`)
+        }
+      })
+      CacheControl.patchKeaktifanUjian();
+      res.sendStatus(204);
+    } catch(error) {
+      next(error);
+    }
+  },
+
   async setNilaiAuto(req, res, next) {
     try {
       const idUjian = req.params.id_ujian;
-      const paket_soal = await Paket_soal.findAll({ 
+      const paket_soal = await models.Paket_soal.findAll({ 
         attributes: ['id_paket', 'id_ujian'],
         where: {id_ujian: idUjian},
         include: {
-          model: Rel_paketsoal_soal, as: 'PaketSoal_Soal_auto',
+          model: models.Rel_paketsoal_soal, as: 'PaketSoal_Soal_auto',
           attributes: ['id', 'kata_kunci_soal'],
           where: {kata_kunci_soal: {[Op.ne]: null}},         
         },
         order: [
-          [{model: Rel_paketsoal_soal, as: 'PaketSoal_Soal_auto'}, 'id', 'ASC']
+          [{model: models.Rel_paketsoal_soal, as: 'PaketSoal_Soal_auto'}, 'id', 'ASC']
         ]
       });
       if(!paket_soal) {
@@ -502,7 +546,7 @@ module.exports = {
         throw createError.NotFound('data ujian tidak ditemukan atau penilaian ujian berupa manual/campuran.');
       }
       const arrayId = jp.query(paket_soal, '$[*].PaketSoal_Soal_auto[*].id');
-      const jawaban = await Jawaban_mahasiswa.findAll({
+      const jawaban = await models.Jawaban_mahasiswa.findAll({
         attributes: ['id_jawaban', 'id_relasi_soalpksoal', 'jawaban'],
         where: {[Op.and]: [
           {id_relasi_soalpksoal: {[Op.in]: arrayId}}, 
@@ -531,15 +575,15 @@ module.exports = {
           nilai_jawaban: totalNilai
         }
       });      
-      await Jawaban_mahasiswa.bulkCreate(nilaiJawaban, {
+      await models.Jawaban_mahasiswa.bulkCreate(nilaiJawaban, {
         updateOnDuplicate: ['id_jawaban', 'nilai_jawaban']
       });
-      const final = await Jawaban_mahasiswa.findAll({
+      const final = await models.Jawaban_mahasiswa.findAll({
         attributes: ['id_mhs', [fn('sum', col('nilai_jawaban')), 'nilai_total']],
         where: {id_relasi_soalpksoal: {[Op.in]: arrayId}},
         group: ['id_mhs'],
-        include: {model: Rel_paketsoal_soal, as: 'RelPaketSoal', attributes: ['id'], 
-          include:{model: Paket_soal, as: 'PaketSoal', attributes: ['id_paket']}},
+        include: {model: models.Rel_paketsoal_soal, as: 'RelPaketSoal', attributes: ['id'], 
+          include:{model: models.Paket_soal, as: 'PaketSoal', attributes: ['id_paket']}},
         raw: true, nest: true
       });
       const data = final.map((i) => {        
@@ -549,7 +593,7 @@ module.exports = {
           nilai_total: parseInt(i.nilai_total),
         }
       });
-      await Rel_mahasiswa_paketsoal.bulkCreate(data, {
+      await models.Rel_mahasiswa_paketsoal.bulkCreate(data, {
         updateOnDuplicate: ['id_mhs', 'id_paket', 'nilai_total']
       });
       CacheControl.postNilaiAuto();
