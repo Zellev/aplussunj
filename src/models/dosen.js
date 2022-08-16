@@ -26,7 +26,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         nama_lengkap:{ 
-            type: DataTypes.STRING(25),
+            type: DataTypes.STRING(60),
             allowNull: false
         },
         alamat: { 
@@ -34,7 +34,7 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: null
         },
         nomor_telp: { 
-            type: DataTypes.STRING(12),
+            type: DataTypes.STRING(15),
             allowNull: false
         },
         updated_at: { 
